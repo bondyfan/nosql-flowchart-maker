@@ -24,4 +24,11 @@ export interface NodeData {
   fields: Field[];
   properties: Record<string, string | number | boolean>;
   collectionId?: string;
+  _isDocumentAction?: boolean;
+  _referencedFields?: Set<string>;
+  _fieldValues?: Map<string, { valueType: string; fixedValue?: string }>;
+  _connectedFieldName?: string;
+  _sourceDocumentLabel?: string;
+  _isAutoNamed?: boolean;
+  _cumulativeFieldValues?: Map<string, { valueType: string; fixedValue?: string }>;
 }

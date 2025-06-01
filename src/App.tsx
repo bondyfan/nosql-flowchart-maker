@@ -29,7 +29,7 @@ function AppContent() {
         <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
           <Header 
             sidebarOpen={sidebarOpen} 
-            toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+            toggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
             onUndo={undoFn}
             onRedo={redoFn}
             canUndo={canUndo}

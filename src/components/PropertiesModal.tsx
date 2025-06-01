@@ -201,7 +201,7 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
       if (onDeleteNode) {
         onDeleteNode(node.id);
       } else {
-        removeNode(node.id);
+      removeNode(node.id);
       }
       onClose();
     }
@@ -584,7 +584,7 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                         return (
                           <option key={node.id} value={node.id}>
                             {node.data.label}
-                          </option>
+                      </option>
                         );
                       }
                     })}

@@ -75,13 +75,13 @@ const CustomEdge: React.FC<CustomEdgeProps> = ({
   } else {
     // Use smooth step path for non-snapped edges
     [edgePath, labelX, labelY] = getSmoothStepPath({
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
-    });
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
   }
 
   const handleDelete = (event: React.MouseEvent) => {

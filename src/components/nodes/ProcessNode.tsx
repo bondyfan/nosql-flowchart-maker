@@ -90,7 +90,7 @@ const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
   // Sync state with data changes only when NOT editing
   useEffect(() => {
     if (!isEditing) {
-      setLabel(data.label || 'Process');
+    setLabel(data.label || 'Process');
       setDescription(
         typeof data.properties?.description === 'string' ? data.properties.description : ''
       );
@@ -176,25 +176,53 @@ const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
 
   return (
     <div 
-      className={`px-4 py-2 rounded-lg shadow-md border ${currentColors.border} ${currentColors.bg} transition-all duration-200 w-[250px] cursor-pointer ${
+      className={`relative px-4 py-2 rounded-lg shadow-md border ${currentColors.border} ${currentColors.bg} transition-all duration-200 w-[250px] cursor-pointer ${
         selected ? `ring-2 ${currentColors.ring} shadow-lg` : ''
       }`}
     >
       {/* Top Handle - Input */}
-      <Handle type="target" position={Position.Top} className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} id="top">
-        <ChevronDown size={14} className="text-white" />
+      <Handle 
+        type="target" 
+        position={Position.Top} 
+        className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} 
+        id="top"
+      >
+        <div className="pointer-events-none">
+          <ChevronDown size={10} className="text-white" />
+        </div>
       </Handle>
       {/* Left Handle - Input */}
-      <Handle type="target" position={Position.Left} className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} id="left">
-        <ChevronRight size={14} className="text-white" />
+      <Handle 
+        type="target" 
+        position={Position.Left} 
+        className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} 
+        id="left"
+      >
+        <div className="pointer-events-none">
+          <ChevronRight size={10} className="text-white" />
+        </div>
       </Handle>
       {/* Right Handle - Output */}
-      <Handle type="source" position={Position.Right} className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} id="right">
-        <ChevronRight size={14} className="text-white font-black" />
+      <Handle 
+        type="source" 
+        position={Position.Right} 
+        className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} 
+        id="right"
+      >
+        <div className="pointer-events-none">
+          <ChevronRight size={10} className="text-white font-bold" />
+        </div>
       </Handle>
       {/* Bottom Handle - Output */}
-      <Handle type="source" position={Position.Bottom} className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} id="bottom">
-        <ChevronDown size={14} className="text-white" />
+      <Handle 
+        type="source" 
+        position={Position.Bottom} 
+        className={`w-4 h-4 ${currentColors.handle} flex items-center justify-center`} 
+        id="bottom"
+      >
+        <div className="pointer-events-none">
+          <ChevronDown size={10} className="text-white" />
+        </div>
       </Handle>
       
       <div className="flex items-center mb-2">
@@ -256,11 +284,11 @@ const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
       {hasDescription && (
         <>
           {isEditing ? (
-            <textarea
-              value={description}
-              onChange={handleDescriptionChange}
+      <textarea
+        value={description}
+        onChange={handleDescriptionChange}
               className={`w-full h-20 p-2 text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-1 ${currentColors.focus} resize-none`}
-              placeholder="Enter process description..."
+        placeholder="Enter process description..."
               onBlur={() => setIsEditing(false)}
             />
           ) : (
@@ -277,4 +305,4 @@ const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
   );
 };
 
-export default memo(ProcessNode);
+export default memo(ProcessNode); 

@@ -191,7 +191,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, selectedProcessNode, onDel
                         <Key size={16} className="text-purple-600 dark:text-purple-400" />
                       )}
                     </div>
-                    <span className="text-sm truncate">{node.data.label}</span>
+                    <span className="text-sm truncate text-gray-900 dark:text-white">{node.data.label}</span>
                   </div>
                 ))}
               </div>

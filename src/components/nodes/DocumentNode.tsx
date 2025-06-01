@@ -5,7 +5,7 @@ import { NodeData } from '../../types';
 import { useDatabase } from '../../context/DatabaseContext';
 
 const DocumentNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => {
-  const { collections } = useDatabase();
+  const { collections, edges } = useDatabase();
   
   // Find the collection for this document
   const collection = data.collectionId 
@@ -16,6 +16,16 @@ const DocumentNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => 
   const isDocumentAction = data._isDocumentAction || false;
   const referencedFields = data._referencedFields || new Set();
   const fieldValues = data._fieldValues || new Map();
+
+  // Helper function to check if a handle is connected
+  const isHandleConnected = (handleId: string) => {
+    const connected = edges.some(edge => 
+      (edge.source === id && edge.sourceHandle === handleId) ||
+      (edge.target === id && edge.targetHandle === handleId)
+    );
+    
+    return connected;
+  };
 
   return (
     <div 
@@ -91,22 +101,37 @@ const DocumentNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => 
                     {field.type}
                   </span>
                   
-                  {/* Add connection point for array fields only - positioned after the type label */}
+                  {/* Add connection points for array fields - both are OUTPUTS */}
                   {isArrayField && (
-                    <div className="relative w-6 flex justify-end">
-                      <Handle
-                        type="source"
-                        position={Position.Right}
-                        className="w-3 h-3 bg-purple-500 static"
-                        id={`array-${index}`}
-                        style={{
-                          position: 'relative',
-                          right: 0,
-                          top: 0,
-                          transform: 'none'
-                        }}
-                      />
-                    </div>
+                    <>
+                      {!isHandleConnected(`array-${index}-right`) && (
+                        <Handle
+                          type="source"
+                          position={Position.Left}
+                          className="w-3 h-3 bg-purple-500"
+                          id={`array-${index}-left`}
+                          style={{
+                            left: -30,
+                            top: 'auto',
+                            transform: 'none'
+                          }}
+                        />
+                      )}
+                      
+                      {!isHandleConnected(`array-${index}-left`) && (
+                        <Handle
+                          type="source"
+                          position={Position.Right}
+                          className="w-3 h-3 bg-purple-500"
+                          id={`array-${index}-right`}
+                          style={{
+                            right: -16,
+                            top: 'auto',
+                            transform: 'none'
+                          }}
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               </div>

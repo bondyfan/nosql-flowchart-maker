@@ -235,10 +235,14 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
             // Check handle validity - allow array field handles as valid source handles
             const hasValidSourceHandle = !edge.sourceHandle || 
               validSourceHandles.includes(edge.sourceHandle) || 
-              edge.sourceHandle.startsWith('array-');
+              edge.sourceHandle.startsWith('array-') ||
+              edge.sourceHandle.startsWith('array-field-') || // Allow array node internal array fields
+              edge.sourceHandle === 'right'; // Allow array node general right handle
             const hasValidTargetHandle = !edge.targetHandle || 
               validTargetHandles.includes(edge.targetHandle) || 
-              edge.targetHandle === 'input';
+              edge.targetHandle === 'input' ||
+              edge.targetHandle === 'left' || // Allow array node general left handle
+              edge.targetHandle.startsWith('array-'); // Allow array field left handles
             
             // Check if nodes exist
             const sourceExists = (data.nodes || []).some(node => node.id === edge.source);
@@ -542,11 +546,15 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
           // Check handle validity - allow array field handles as valid source handles
           const hasValidSourceHandle = !edge.sourceHandle || 
             validSourceHandles.includes(edge.sourceHandle) || 
-            edge.sourceHandle.startsWith('array-');
+            edge.sourceHandle.startsWith('array-') ||
+            edge.sourceHandle.startsWith('array-field-') || // Allow array node internal array fields
+            edge.sourceHandle === 'right'; // Allow array node general right handle
           const hasValidTargetHandle = !edge.targetHandle || 
             validTargetHandles.includes(edge.targetHandle) || 
-            edge.targetHandle === 'input';
-          
+            edge.targetHandle === 'input' ||
+            edge.targetHandle === 'left' || // Allow array node general left handle
+            edge.targetHandle.startsWith('array-'); // Allow array field left handles
+            
           // Check if nodes exist
           const sourceExists = (data.nodes || []).some(node => node.id === edge.source);
           const targetExists = (data.nodes || []).some(node => node.id === edge.target);

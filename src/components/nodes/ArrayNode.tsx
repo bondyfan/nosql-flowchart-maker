@@ -2,8 +2,10 @@ import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Brackets, Link, Zap } from 'lucide-react';
 import { NodeData } from '../../types';
+import { useDatabase } from '../../context/DatabaseContext';
 
-const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected }) => {
+const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => {
+  const { edges } = useDatabase();
   const isAutoNamed = data._isAutoNamed;
   const connectedFieldName = data._connectedFieldName;
   const sourceDocumentLabel = data._sourceDocumentLabel;
@@ -12,6 +14,16 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected }) => {
   const isDocumentAction = data._isDocumentAction || false;
   const referencedFields = data._referencedFields || new Set();
   const fieldValues = data._fieldValues || new Map();
+
+  // Helper function to check if a handle is connected
+  const isHandleConnected = (handleId: string) => {
+    const connected = edges.some(edge => 
+      (edge.source === id && edge.sourceHandle === handleId) ||
+      (edge.target === id && edge.targetHandle === handleId)
+    );
+    
+    return connected;
+  };
 
   return (
     <div 
@@ -23,13 +35,34 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected }) => {
             : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
       } ${selected ? 'ring-2 ring-blue-500 shadow-lg' : ''}`}
     >
-      {/* Single Left Handle for input from array fields */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="w-3 h-3 bg-purple-500"
-        id="input"
-      />
+      {/* Dual handles for array node - both are INPUTS positioned at header level */}
+      {!isHandleConnected('right') && (
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="w-3 h-3 bg-purple-500"
+          id="left"
+          style={{
+            left: -12,
+            top: 20, // Position at header level
+            transform: 'none'
+          }}
+        />
+      )}
+      
+      {!isHandleConnected('left') && (
+        <Handle
+          type="target"
+          position={Position.Right}
+          className="w-3 h-3 bg-purple-500"
+          id="right"
+          style={{
+            right: -12,
+            top: 20, // Position at header level
+            transform: 'none'
+          }}
+        />
+      )}
       
       <div className="flex items-center">
         <Brackets size={18} className={`mr-2 ${
@@ -49,7 +82,9 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected }) => {
           {data.label}
         </div>
         {isAutoNamed && (
-          <Link size={14} className="ml-2 text-purple-600 dark:text-purple-400" title="Auto-named from connected field" />
+          <div title="Auto-named from connected field">
+            <Link size={14} className="ml-2 text-purple-600 dark:text-purple-400" />
+          </div>
         )}
       </div>
       
@@ -96,8 +131,9 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected }) => {
           {data.fields.map((field, index) => {
             const isReferencedField = referencedFields.has(field.name);
             const fieldValue = fieldValues.get(field.name);
+            const isArrayField = field.type === 'array';
             return (
-              <div key={index} className="text-xs flex justify-between items-center py-1">
+              <div key={index} className="text-xs flex justify-between items-center py-1 relative">
                 <div className="flex items-center space-x-1 flex-1">
                   <span className={`${
                     isReferencedField 
@@ -124,17 +160,53 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected }) => {
                     </span>
                   )}
                 </div>
-                <span className={`font-medium ${
-                  isReferencedField 
-                    ? 'text-orange-600 dark:text-orange-400 font-bold' 
-                    : isDocumentAction 
-                      ? 'text-orange-600 dark:text-orange-400' 
-                      : isAutoNamed 
-                        ? 'text-purple-600 dark:text-purple-400' 
-                        : 'text-purple-600 dark:text-purple-400'
-                }`}>
-                  {field.type}
-                </span>
+                
+                <div className="flex items-center space-x-2">
+                  <span className={`font-medium ${
+                    isReferencedField 
+                      ? 'text-orange-600 dark:text-orange-400 font-bold' 
+                      : isDocumentAction 
+                        ? 'text-orange-600 dark:text-orange-400' 
+                        : isAutoNamed 
+                          ? 'text-purple-600 dark:text-purple-400' 
+                          : 'text-purple-600 dark:text-purple-400'
+                  }`}>
+                    {field.type}
+                  </span>
+                  
+                  {/* Add connection points for array fields within array node - both are OUTPUTS */}
+                  {isArrayField && (
+                    <>
+                      {!isHandleConnected(`array-field-${index}-right`) && (
+                        <Handle
+                          type="source"
+                          position={Position.Left}
+                          className="w-3 h-3 bg-purple-500"
+                          id={`array-field-${index}-left`}
+                          style={{
+                            left: -30,
+                            top: 'auto',
+                            transform: 'none'
+                          }}
+                        />
+                      )}
+                      
+                      {!isHandleConnected(`array-field-${index}-left`) && (
+                        <Handle
+                          type="source"
+                          position={Position.Right}
+                          className="w-3 h-3 bg-purple-500"
+                          id={`array-field-${index}-right`}
+                          style={{
+                            right: -22,
+                            top: 'auto',
+                            transform: 'none'
+                          }}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}

@@ -75,7 +75,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
   const getVisibleNodesWithFilteredFields = () => {
     if (!selectedProcessNode) {
       // No process selected, show all nodes with all fields
-      return nodes;
+      return { nodes, cumulativeReferencedDocuments: new Set(), cumulativeReferencedFields: new Map() };
     }
 
     // Get all process nodes and build connection graph
@@ -96,10 +96,10 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
           
         if (isValidConnection) {
           // Outgoing connections
-          if (!processConnections.has(edge.source)) {
-            processConnections.set(edge.source, []);
-          }
-          processConnections.get(edge.source).push(edge.target);
+        if (!processConnections.has(edge.source)) {
+          processConnections.set(edge.source, []);
+        }
+        processConnections.get(edge.source).push(edge.target);
           
           // Incoming connections
           if (!incomingConnections.has(edge.target)) {
@@ -164,6 +164,24 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       }).map(e => ({ source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle }))
     });
     
+    console.log('🔗 All Process Edges:', edges.filter(e => {
+      const source = nodes.find(n => n.id === e.source);
+      const target = nodes.find(n => n.id === e.target);
+      return source?.type === 'process' || target?.type === 'process';
+    }).map(e => ({
+      id: e.id,
+      source: `${e.source} (${nodes.find(n => n.id === e.source)?.data.label})`,
+      target: `${e.target} (${nodes.find(n => n.id === e.target)?.data.label})`,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      sourceType: nodes.find(n => n.id === e.source)?.type,
+      targetType: nodes.find(n => n.id === e.target)?.type,
+      isValidProcessConnection: (e.sourceHandle === 'right' || e.sourceHandle === 'bottom') &&
+                               (e.targetHandle === 'left' || e.targetHandle === 'top') &&
+                               nodes.find(n => n.id === e.source)?.type === 'process' &&
+                               nodes.find(n => n.id === e.target)?.type === 'process'
+    })));
+    
     // Find processes up to and including the selected one in flow order
     const selectedProcessIndex = completeFlowChain.indexOf(selectedProcessNode);
     let relevantProcessIds = [];
@@ -172,13 +190,43 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       // Take processes up to and including the selected one
       relevantProcessIds = completeFlowChain.slice(0, selectedProcessIndex + 1);
     } else {
-      // If selected process not in main chain, fall back to just the selected process
-      relevantProcessIds = [selectedProcessNode];
+      // If selected process not in main chain, build a chain starting from the selected process
+      console.warn(`⚠️ Selected process "${selectedProcessNode}" not found in main flow chain!`);
+      console.log('🔧 Building chain from selected process instead...');
+      
+      // Find all processes that lead TO the selected process (working backwards)
+      const buildBackwardsChain = (processId, visited = new Set()) => {
+        if (visited.has(processId)) return [];
+        visited.add(processId);
+        
+        const predecessors = incomingConnections.get(processId) || [];
+        let chain = [];
+        
+        // Add all predecessors first (recursively)
+        for (const pred of predecessors) {
+          chain.push(...buildBackwardsChain(pred, visited));
+        }
+        
+        // Then add this process
+        chain.push(processId);
+        return chain;
+      };
+      
+      // Build chain including all processes that lead to the selected one
+      relevantProcessIds = buildBackwardsChain(selectedProcessNode);
+      
+      console.log('🔧 Built backwards chain:', relevantProcessIds.map(id => {
+        const node = nodes.find(n => n.id === id);
+        return `${id} (${node?.data.label})`;
+      }));
     }
     
     console.log('📊 Relevant Process IDs:', relevantProcessIds);
+    console.log('📊 Selected Process Index:', selectedProcessIndex);
+    console.log('📊 Complete Flow Chain:', completeFlowChain);
     
     const referencedDocuments = new Set();
+    const documentsWithDocumentActions = new Set(); // Only documents with actual document-level actions
     const documentFieldsMap = new Map(); // documentId -> Set of field names
     const cumulativeFieldValues = new Map(); // documentId -> Map(fieldName -> { valueType, fixedValue })
 
@@ -186,6 +234,8 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
     relevantProcessIds.forEach(processId => {
       const processNode = nodes.find(n => n.id === processId);
       const processActions = processNode?.data.properties?.processActions || [];
+      
+      console.log(`🔄 Processing ${processActions.length} actions from process "${processNode?.data.label}" (${processId})`);
       
       // Sort actions within this process by their creation timestamp to ensure proper order
       const sortedActions = [...processActions].sort((a, b) => {
@@ -197,6 +247,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       console.log(`🔄 Processing actions for process "${processNode?.data.label}" (${processId}):`, 
         sortedActions.map(a => ({
           type: a.type,
+          nodeId: a.nodeId,
           fieldName: a.fieldName || 'N/A',
           valueType: a.valueType || 'N/A',
           fixedValue: a.fixedValue || 'N/A',
@@ -208,6 +259,8 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       sortedActions.forEach(action => {
         if (action.type === 'document') {
           referencedDocuments.add(action.nodeId);
+          documentsWithDocumentActions.add(action.nodeId); // Track document-level actions separately
+          console.log(`  📄 Added document action for ${action.nodeId} - ${action.documentLabel}`);
         } else if (action.type === 'field') {
           referencedDocuments.add(action.nodeId); // Add the document
           
@@ -238,6 +291,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       });
     });
     
+    console.log('🎯 Final cumulative document actions:', Array.from(documentsWithDocumentActions));
     console.log('📋 Final cumulative field values:', 
       Object.fromEntries(
         Array.from(cumulativeFieldValues.entries()).map(([docId, fieldMap]) => [
@@ -248,7 +302,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
     );
 
     // Filter and modify nodes
-    return nodes.map(node => {
+    const filteredNodes = nodes.map(node => {
       if (node.type === 'process') {
         return node; // Always show all process nodes
       }
@@ -286,9 +340,16 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       
       return null; // Hide non-referenced nodes
     }).filter(node => node !== null);
+
+    return { 
+      nodes: filteredNodes, 
+      cumulativeReferencedDocuments: referencedDocuments, 
+      cumulativeDocumentsWithDocumentActions: documentsWithDocumentActions,
+      cumulativeReferencedFields: documentFieldsMap 
+    };
   };
 
-  const visibleNodes = getVisibleNodesWithFilteredFields();
+  const { nodes: visibleNodes, cumulativeReferencedDocuments, cumulativeDocumentsWithDocumentActions, cumulativeReferencedFields } = getVisibleNodesWithFilteredFields();
 
   // Snapping threshold - edges will snap to straight lines if they're within this distance
   const SNAP_THRESHOLD = 10;
@@ -299,26 +360,44 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       return currentNodes.map(node => {
         if (node.type !== 'array') return node;
         
-        // Find edges connecting to this array node
+        // Find edges connecting TO this array node (incoming connections to either left or right)
         const connectingEdge = edges.find(edge => 
-          edge.target === node.id && edge.targetHandle === 'input'
+          edge.target === node.id && (edge.targetHandle === 'left' || edge.targetHandle === 'right' || edge.targetHandle === 'input')
         );
         
+        console.log(`🔍 Checking array node "${node.data.label}" (${node.id}):`, {
+          connectingEdge: connectingEdge ? {
+            id: connectingEdge.id,
+            source: connectingEdge.source,
+            sourceHandle: connectingEdge.sourceHandle,
+            target: connectingEdge.target,
+            targetHandle: connectingEdge.targetHandle
+          } : null,
+          allIncomingEdges: edges.filter(e => e.target === node.id).map(e => ({
+            source: e.source,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle
+          }))
+        });
+        
         if (connectingEdge) {
-          // Find the source document node
+          // Find the source node
           const sourceNode = currentNodes.find(n => n.id === connectingEdge.source);
           
           if (sourceNode && sourceNode.type === 'document' && connectingEdge.sourceHandle?.startsWith('array-')) {
-            // Extract field index from handle
-            const fieldIndex = parseInt(connectingEdge.sourceHandle.replace('array-', ''));
+            // Handle connections from document array fields
+            const handleParts = connectingEdge.sourceHandle.split('-');
+            const fieldIndex = parseInt(handleParts[1]);
             const field = sourceNode.data.fields?.[fieldIndex];
+            
+            console.log(`📄 Document connection: field index ${fieldIndex}, field:`, field);
             
             if (field && field.type === 'array') {
               // Update array node name to match the field name
               const newLabel = field.name;
               
               if (node.data.label !== newLabel) {
-                console.log(`🔄 Auto-updating array node "${node.data.label}" → "${newLabel}"`);
+                console.log(`🔄 Auto-updating array node "${node.data.label}" → "${newLabel}" (from document)`);
                 return {
                   ...node,
                   data: {
@@ -326,6 +405,32 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
                     label: newLabel,
                     _connectedFieldName: field.name,
                     _sourceDocumentLabel: sourceNode.data.label,
+                    _isAutoNamed: true
+                  }
+                };
+              }
+            }
+          } else if (sourceNode && sourceNode.type === 'array' && connectingEdge.sourceHandle?.startsWith('array-field-')) {
+            // Handle connections from array node internal fields to other array nodes
+            const handleParts = connectingEdge.sourceHandle.split('-');
+            const fieldIndex = parseInt(handleParts[2]); // array-field-{index}-right
+            const field = sourceNode.data.fields?.[fieldIndex];
+            
+            console.log(`🔗 Array field connection: field index ${fieldIndex}, field:`, field);
+            
+            if (field && field.type === 'array') {
+              // Update array node name to match the field name from the source array
+              const newLabel = field.name;
+              
+              if (node.data.label !== newLabel) {
+                console.log(`🔄 Auto-updating array node "${node.data.label}" → "${newLabel}" (from array field)`);
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    label: newLabel,
+                    _connectedFieldName: field.name,
+                    _sourceDocumentLabel: `${sourceNode.data.label} → ${field.name}`,
                     _isAutoNamed: true
                   }
                 };
@@ -459,6 +564,16 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
 
   const onConnect = useCallback(
     (params: Edge | Connection) => {
+      // Add debug logging
+      console.log('🔗 Connection attempt:', {
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
+        sourceNode: nodes.find(n => n.id === params.source)?.type,
+        targetNode: nodes.find(n => n.id === params.target)?.type
+      });
+
       // First, validate handle directions to prevent React Flow errors
       const sourceHandle = params.sourceHandle;
       const targetHandle = params.targetHandle;
@@ -468,23 +583,26 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       const validTargetHandles = ['left', 'top']; // Standard input handles
       
       // Check if handles are valid for their roles
-      // Allow array field handles (like 'array-0', 'array-1', etc.) as valid source handles
+      // Allow array field handles as valid source handles
       const isValidSourceHandle = !sourceHandle || 
         validSourceHandles.includes(sourceHandle) || 
-        sourceHandle.startsWith('array-');
+        sourceHandle.startsWith('array-') ||
+        sourceHandle.startsWith('array-field-');
       
       if (!isValidSourceHandle) {
         console.warn(`Connection rejected: Invalid source handle "${sourceHandle}". Source must be 'right', 'bottom', or an array field handle.`);
         return;
       }
       
-      // Allow "input" as a valid target handle for array nodes
+      // Allow "input", "left", "right" as valid target handles for array nodes  
       const isValidTargetHandle = !targetHandle || 
         validTargetHandles.includes(targetHandle) || 
-        targetHandle === 'input';
+        targetHandle === 'input' ||
+        targetHandle === 'left' ||
+        targetHandle === 'right';
       
       if (!isValidTargetHandle) {
-        console.warn(`Connection rejected: Invalid target handle "${targetHandle}". Target must be 'left', 'top', or 'input'.`);
+        console.warn(`Connection rejected: Invalid target handle "${targetHandle}". Target must be 'left', 'top', 'right', or 'input'.`);
         return;
       }
       
@@ -507,27 +625,61 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       if (sourceNode.type === 'document' && targetNode.type === 'array') {
         // Check if the source handle corresponds to an array field
         if (sourceHandle && sourceHandle.startsWith('array-')) {
-          const fieldIndex = parseInt(sourceHandle.replace('array-', ''));
+          const handleParts = sourceHandle.split('-');
+          const fieldIndex = parseInt(handleParts[1]);
           const field = sourceNode.data.fields?.[fieldIndex];
           if (!field || field.type !== 'array') {
             console.warn('Connection rejected: Source handle does not correspond to an array field');
             return;
           }
+          // Both left and right handles are valid for array nodes (both are inputs)
+          if (targetHandle !== 'left' && targetHandle !== 'right') {
+            console.warn('Connection rejected: Target handle must be left or right for array nodes');
+            return;
+          }
         } else {
-          console.warn('Connection rejected: Source handle is not an array field handle');
+          console.warn('Connection rejected: Source handle must be an array field handle');
           return;
         }
-      } else if (sourceNode.type === 'document' || targetNode.type === 'array') {
-        // Reject other connections involving document nodes or array nodes
+      } else if (sourceNode.type === 'array' && targetNode.type === 'array') {
+        // Allow connections between array nodes via internal array fields
+        if (sourceHandle === 'right' || sourceHandle === 'left') {
+          // BLOCK connections from array general handles - they are inputs
+          console.warn('Connection rejected: Cannot connect from array general handles - they are inputs, not outputs');
+          return;
+        }
+        if (!sourceHandle?.startsWith('array-field-')) {
+          console.warn('Connection rejected: Source handle must be an array field handle from array node');
+          return;
+        }
+        if (targetHandle !== 'left' && targetHandle !== 'right') {
+          console.warn('Connection rejected: Target handle must be left or right for array nodes');
+          return;
+        }
+      } else if (sourceNode.type === 'array' && targetNode.type === 'document') {
+        // BLOCK array to document connections - wrong data flow direction
+        console.warn('Connection rejected: Cannot connect from array node to document - data must flow FROM fields TO arrays');
+        return;
+      } else if (targetNode.type === 'document' && targetHandle?.startsWith('array-')) {
+        // BLOCK connections TO document array fields - they are outputs, not inputs
+        console.warn('Connection rejected: Cannot connect to document array fields - they are outputs, not inputs');
+        return;
+      } else if (sourceNode.type === 'process' || targetNode.type === 'process') {
+        // Allow process nodes to connect to any other node type with valid handles
+        // Process nodes have top, left, right, bottom handles which are already validated above
+        console.log('✅ Process connection allowed');
+      } else if ((sourceNode.type === 'document' || sourceNode.type === 'array') && 
+                 (targetNode.type === 'document' || targetNode.type === 'array')) {
+        // Reject other connections between document/array nodes that don't follow the rules above
         console.warn('Connection rejected: Invalid connection between document and array nodes');
         return;
       }
 
       const newEdge = {
-        ...params,
+      ...params,
         id: `edge-${Date.now()}`,
-        type: 'custom',
-        animated: true,
+      type: 'custom',
+      animated: true,
       } as Edge;
 
       // Save state for undo
@@ -835,12 +987,13 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
     let referencedFields = new Set();
     let fieldValues = new Map(); // fieldName -> { valueType, fixedValue }
     
-    // Check if this node has actions in the selected process (for highlighting)
+    // Use different logic for highlighting vs cumulative values
     if (selectedProcessNode) {
+      // HIGHLIGHTING: Only show actions from the CURRENTLY SELECTED process (orange highlighting)
       const selectedProcess = nodes.find(n => n.id === selectedProcessNode);
-      const processActions = selectedProcess?.data.properties?.processActions || [];
+      const selectedProcessActions = selectedProcess?.data.properties?.processActions || [];
       
-      processActions.forEach(action => {
+      selectedProcessActions.forEach(action => {
         if (action.nodeId === node.id) {
           if (action.type === 'document') {
             isDocumentAction = true;
@@ -850,7 +1003,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
         }
       });
 
-      // Use cumulative field values if available (for persistent values across processes)
+      // FIELD VALUES: Use cumulative field values from all processes up to the selected one
       if (node.data._cumulativeFieldValues) {
         fieldValues = node.data._cumulativeFieldValues;
       }
@@ -883,7 +1036,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
         event.preventDefault();
         performUndo();
       } else if (((event.metaKey || event.ctrlKey) && event.key === 'y') || 
-                 ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === 'z')) {
+                 ((event.metaKey || event.ctrlKey) && event.key === 'z' && event.shiftKey)) {
         event.preventDefault();
         performRedo();
       }
@@ -955,6 +1108,75 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       );
     }
   }, [undoHistory, redoHistory, onUndoRedoChange]);
+
+  // Clean up invalid edges that reference non-existent handles
+  const cleanupInvalidEdges = useCallback(() => {
+    const validHandles = new Set<string>();
+    
+    // Collect all valid handles from all nodes
+    nodes.forEach(node => {
+      if (node.type === 'process') {
+        validHandles.add(`${node.id}:top`);
+        validHandles.add(`${node.id}:left`);
+        validHandles.add(`${node.id}:right`);
+        validHandles.add(`${node.id}:bottom`);
+      } else if (node.type === 'array') {
+        validHandles.add(`${node.id}:left`);
+        validHandles.add(`${node.id}:right`);
+        // Array node field handles (both left and right - all outputs)
+        if (node.data.fields) {
+          node.data.fields.forEach((field, index) => {
+            if (field.type === 'array') {
+              validHandles.add(`${node.id}:array-field-${index}-left`);
+              validHandles.add(`${node.id}:array-field-${index}-right`);
+            }
+          });
+        }
+      } else if (node.type === 'document') {
+        // Document array field handles (both left and right - all outputs)
+        if (node.data.fields) {
+          node.data.fields.forEach((field, index) => {
+            if (field.type === 'array') {
+              validHandles.add(`${node.id}:array-${index}-left`);
+              validHandles.add(`${node.id}:array-${index}-right`);
+            }
+          });
+        }
+      }
+    });
+    
+    // Filter out edges with invalid handles
+    const validEdges = edges.filter(edge => {
+      const sourceKey = `${edge.source}:${edge.sourceHandle || 'undefined'}`;
+      const targetKey = `${edge.target}:${edge.targetHandle || 'undefined'}`;
+      
+      const isValidSource = validHandles.has(sourceKey);
+      const isValidTarget = validHandles.has(targetKey);
+      
+      if (!isValidSource || !isValidTarget) {
+        console.log(`🧹 Removing invalid edge:`, {
+          id: edge.id,
+          source: sourceKey,
+          target: targetKey,
+          sourceValid: isValidSource,
+          targetValid: isValidTarget
+        });
+        return false;
+      }
+      
+      return true;
+    });
+    
+    if (validEdges.length !== edges.length) {
+      console.log(`🧹 Cleaned up ${edges.length - validEdges.length} invalid edges`);
+      setEdges(validEdges);
+    }
+  }, [nodes, edges, setEdges]);
+
+  // Run cleanup when component loads or when nodes change
+  useEffect(() => {
+    cleanupInvalidEdges();
+  }, [cleanupInvalidEdges]);
 
   return (
     <div className="flex-1 flex">

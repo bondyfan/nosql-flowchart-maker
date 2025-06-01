@@ -7,13 +7,15 @@ import { useDatabase } from '../../context/DatabaseContext';
 const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
   const { updateNodeData } = useDatabase();
   const [label, setLabel] = useState(data.label || 'Process');
-  const [description, setDescription] = useState(data.properties?.description || '');
+  const [description, setDescription] = useState(
+    typeof data.properties?.description === 'string' ? data.properties.description : ''
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [editingValue, setEditingValue] = useState('');
   const editableRef = useRef<HTMLDivElement>(null);
 
   // Get the selected color or default to yellow
-  const nodeColor = data.properties?.color || 'yellow';
+  const nodeColor = typeof data.properties?.color === 'string' ? data.properties.color : 'yellow';
   
   // Define color classes for different color options
   const colorClasses = {
@@ -81,15 +83,17 @@ const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
       icon: 'text-indigo-600 dark:text-indigo-400',
       focus: 'focus:ring-indigo-500'
     }
-  };
+  } as const;
 
-  const currentColors = colorClasses[nodeColor] || colorClasses.yellow;
+  const currentColors = colorClasses[nodeColor as keyof typeof colorClasses] || colorClasses.yellow;
 
   // Sync state with data changes only when NOT editing
   useEffect(() => {
     if (!isEditing) {
       setLabel(data.label || 'Process');
-      setDescription(data.properties?.description || '');
+      setDescription(
+        typeof data.properties?.description === 'string' ? data.properties.description : ''
+      );
     }
   }, [data.label, data.properties?.description, isEditing]);
 

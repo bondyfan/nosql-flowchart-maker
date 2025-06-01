@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Node } from 'reactflow';
-import { Trash2, Plus, X, Database, Key, GripVertical } from 'lucide-react';
+import { Trash2, Plus, X, Database, Key, GripVertical, Brackets } from 'lucide-react';
 import { useDatabase } from '../context/DatabaseContext';
 import { NodeData } from '../types';
 import {
@@ -110,12 +110,15 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
     })
   );
 
-  // Get existing document nodes
+  // Get existing document nodes (for document actions)
   const documentNodes = nodes.filter(n => n.type === 'document');
   
-  // Get fields from selected document
-  const selectedDocument = nodes.find(n => n.id === selectedDocumentForField);
-  const availableFields = selectedDocument?.data.fields || [];
+  // Get existing document and array nodes (for field actions)
+  const fieldableNodes = nodes.filter(n => n.type === 'document' || n.type === 'array');
+  
+  // Get fields from selected node (document or array)
+  const selectedNode = nodes.find(n => n.id === selectedDocumentForField);
+  const availableFields = selectedNode?.data.fields || [];
 
   // Sync state when node changes
   useEffect(() => {
@@ -228,13 +231,13 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
     if (type === 'document' && selectedDocumentId) {
       const selectedDoc = nodes.find(n => n.id === selectedDocumentId);
       if (selectedDoc) {
-        // Save document action to process actions list
+        // Save node action to process actions list
         const newAction = {
           id: `action_${Date.now()}`,
-          type: 'document',
+          type: 'document', // Keep as 'document' for backward compatibility, but description will clarify
           nodeId: selectedDocumentId,
           label: selectedDoc.data.label,
-          description: `Document: ${selectedDoc.data.label}`,
+          description: `${selectedDoc.type === 'document' ? 'Document' : 'Array'}: ${selectedDoc.data.label}`,
           savedAt: new Date().toISOString()
         };
         
@@ -249,7 +252,7 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
         });
         
         setSelectedDocumentId('');
-        console.log(`✅ Saved document action "${selectedDoc.data.label}" to process`);
+        console.log(`✅ Saved ${selectedDoc.type} action "${selectedDoc.data.label}" to process`);
       }
     } else if (type === 'field' && selectedDocumentForField && selectedFieldIndex !== '') {
       const selectedDoc = nodes.find(n => n.id === selectedDocumentForField);
@@ -360,13 +363,30 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
             <label htmlFor="node-label" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
               Node Label
             </label>
+            
+            {/* Show auto-naming info for array nodes */}
+            {node.type === 'array' && node.data._isAutoNamed && (
+              <div className="mb-2 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                <p className="text-sm text-purple-800 dark:text-purple-200 flex items-center">
+                  <Brackets size={14} className="mr-2" />
+                  This array node's name is automatically set based on the connected field: <strong>{node.data._connectedFieldName}</strong>
+                </p>
+              </div>
+            )}
+            
             <input
               type="text"
               id="node-label"
-              className="block w-full rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-2 focus:ring-opacity-20 px-4 py-3 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-all"
+              className={`block w-full rounded-xl border shadow-sm px-4 py-3 text-sm transition-all ${
+                node.type === 'array' && node.data._isAutoNamed
+                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-blue-500 focus:ring-2 focus:ring-opacity-20'
+              } placeholder-gray-500 dark:placeholder-gray-400`}
               value={label}
               onChange={(e) => handleLabelChange(e.target.value)}
               placeholder="Enter a descriptive label"
+              readOnly={node.type === 'array' && node.data._isAutoNamed}
+              title={node.type === 'array' && node.data._isAutoNamed ? 'Array node names are automatically assigned based on connected fields' : undefined}
             />
           </div>
 
@@ -543,12 +563,31 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                     }}
                     className="block w-full rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm focus:border-violet-500 focus:ring-violet-500 focus:ring-2 focus:ring-opacity-20 px-4 py-3 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-all"
                   >
-                    <option value="">Choose document...</option>
-                    {documentNodes.map((docNode) => (
-                      <option key={docNode.id} value={docNode.id}>
-                        {docNode.data.label}
-                      </option>
-                    ))}
+                    <option value="">Choose node...</option>
+                    {fieldableNodes.map((node) => {
+                      // Create descriptive label for arrays
+                      if (node.type === 'array') {
+                        if (node.data._isAutoNamed && node.data._sourceDocumentLabel) {
+                          return (
+                            <option key={node.id} value={node.id}>
+                              [Array] {node.data.label} (from {node.data._sourceDocumentLabel})
+                            </option>
+                          );
+                        } else {
+                          return (
+                            <option key={node.id} value={node.id}>
+                              [Array] {node.data.label}
+                            </option>
+                          );
+                        }
+                      } else {
+                        return (
+                          <option key={node.id} value={node.id}>
+                            {node.data.label}
+                          </option>
+                        );
+                      }
+                    })}
                   </select>
                   
                   {selectedDocumentForField && (
@@ -608,16 +647,16 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                   {selectedDocumentForField && availableFields.length === 0 && (
                     <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                       <p className="text-sm text-amber-800 dark:text-amber-200">
-                        Selected document has no fields. Add fields to the document first.
+                        Selected node has no fields. Add fields to the node first.
                       </p>
                     </div>
                   )}
                 </div>
                 
-                {documentNodes.length === 0 && (
+                {fieldableNodes.length === 0 && (
                   <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                     <p className="text-sm text-blue-800 dark:text-blue-200">
-                      No document nodes available. Create document nodes first.
+                      No document or array nodes available. Create document or array nodes first.
                     </p>
                   </div>
                 )}

@@ -187,7 +187,25 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       const processNode = nodes.find(n => n.id === processId);
       const processActions = processNode?.data.properties?.processActions || [];
       
-      processActions.forEach(action => {
+      // Sort actions within this process by their creation timestamp to ensure proper order
+      const sortedActions = [...processActions].sort((a, b) => {
+        const timeA = new Date(a.savedAt || 0).getTime();
+        const timeB = new Date(b.savedAt || 0).getTime();
+        return timeA - timeB; // Earlier actions first
+      });
+      
+      console.log(`🔄 Processing actions for process "${processNode?.data.label}" (${processId}):`, 
+        sortedActions.map(a => ({
+          type: a.type,
+          fieldName: a.fieldName || 'N/A',
+          valueType: a.valueType || 'N/A',
+          fixedValue: a.fixedValue || 'N/A',
+          savedAt: a.savedAt,
+          documentLabel: a.documentLabel || 'N/A'
+        }))
+      );
+      
+      sortedActions.forEach(action => {
         if (action.type === 'document') {
           referencedDocuments.add(action.nodeId);
         } else if (action.type === 'field') {
@@ -204,14 +222,30 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
             if (!cumulativeFieldValues.has(action.nodeId)) {
               cumulativeFieldValues.set(action.nodeId, new Map());
             }
+            const prevValue = cumulativeFieldValues.get(action.nodeId).get(action.fieldName);
             cumulativeFieldValues.get(action.nodeId).set(action.fieldName, {
               valueType: action.valueType,
               fixedValue: action.fixedValue
             });
+            
+            console.log(`  📝 Field "${action.fieldName}" value updated:`, 
+              prevValue ? `${prevValue.valueType}${prevValue.fixedValue ? `:"${prevValue.fixedValue}"` : ''}` : 'none',
+              '→',
+              `${action.valueType}${action.fixedValue ? `:"${action.fixedValue}"` : ''}`
+            );
           }
         }
       });
     });
+    
+    console.log('📋 Final cumulative field values:', 
+      Object.fromEntries(
+        Array.from(cumulativeFieldValues.entries()).map(([docId, fieldMap]) => [
+          docId,
+          Object.fromEntries(fieldMap.entries())
+        ])
+      )
+    );
 
     // Filter and modify nodes
     return nodes.map(node => {
@@ -258,6 +292,73 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
 
   // Snapping threshold - edges will snap to straight lines if they're within this distance
   const SNAP_THRESHOLD = 10;
+
+  // Function to update array node names based on connected fields
+  const updateArrayNodeNames = useCallback(() => {
+    setNodes(currentNodes => {
+      return currentNodes.map(node => {
+        if (node.type !== 'array') return node;
+        
+        // Find edges connecting to this array node
+        const connectingEdge = edges.find(edge => 
+          edge.target === node.id && edge.targetHandle === 'input'
+        );
+        
+        if (connectingEdge) {
+          // Find the source document node
+          const sourceNode = currentNodes.find(n => n.id === connectingEdge.source);
+          
+          if (sourceNode && sourceNode.type === 'document' && connectingEdge.sourceHandle?.startsWith('array-')) {
+            // Extract field index from handle
+            const fieldIndex = parseInt(connectingEdge.sourceHandle.replace('array-', ''));
+            const field = sourceNode.data.fields?.[fieldIndex];
+            
+            if (field && field.type === 'array') {
+              // Update array node name to match the field name
+              const newLabel = field.name;
+              
+              if (node.data.label !== newLabel) {
+                console.log(`🔄 Auto-updating array node "${node.data.label}" → "${newLabel}"`);
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    label: newLabel,
+                    _connectedFieldName: field.name,
+                    _sourceDocumentLabel: sourceNode.data.label,
+                    _isAutoNamed: true
+                  }
+                };
+              }
+            }
+          }
+        } else {
+          // No connection found - reset to default name if it was auto-named
+          if (node.data._isAutoNamed) {
+            const defaultLabel = 'Unconnected Array';
+            console.log(`🔄 Resetting array node name: "${node.data.label}" → "${defaultLabel}"`);
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                label: defaultLabel,
+                _connectedFieldName: undefined,
+                _sourceDocumentLabel: undefined,
+                _isAutoNamed: false
+              }
+            };
+          }
+        }
+        
+        return node;
+      });
+    });
+  }, [edges]);
+
+  // Update array node names when edges change
+  useEffect(() => {
+    updateArrayNodeNames();
+  }, [edges, updateArrayNodeNames]);
 
   // Save current state for undo
   const saveStateForUndo = (actionType: string, data: any) => {
@@ -358,31 +459,68 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
 
   const onConnect = useCallback(
     (params: Edge | Connection) => {
-      // Validate connection: only allow array fields from document nodes to connect to array nodes
+      // First, validate handle directions to prevent React Flow errors
+      const sourceHandle = params.sourceHandle;
+      const targetHandle = params.targetHandle;
+      
+      // Define valid handle directions
+      const validSourceHandles = ['right', 'bottom']; // Standard output handles
+      const validTargetHandles = ['left', 'top']; // Standard input handles
+      
+      // Check if handles are valid for their roles
+      // Allow array field handles (like 'array-0', 'array-1', etc.) as valid source handles
+      const isValidSourceHandle = !sourceHandle || 
+        validSourceHandles.includes(sourceHandle) || 
+        sourceHandle.startsWith('array-');
+      
+      if (!isValidSourceHandle) {
+        console.warn(`Connection rejected: Invalid source handle "${sourceHandle}". Source must be 'right', 'bottom', or an array field handle.`);
+        return;
+      }
+      
+      // Allow "input" as a valid target handle for array nodes
+      const isValidTargetHandle = !targetHandle || 
+        validTargetHandles.includes(targetHandle) || 
+        targetHandle === 'input';
+      
+      if (!isValidTargetHandle) {
+        console.warn(`Connection rejected: Invalid target handle "${targetHandle}". Target must be 'left', 'top', or 'input'.`);
+        return;
+      }
+      
+      // Validate nodes exist
       const sourceNode = nodes.find(node => node.id === params.source);
       const targetNode = nodes.find(node => node.id === params.target);
       
-      if (sourceNode && targetNode) {
-        // Check if trying to connect from document array field to array node
-        if (sourceNode.type === 'document' && targetNode.type === 'array') {
-          // Check if the source handle corresponds to an array field
-          const sourceHandle = params.sourceHandle;
-          if (sourceHandle && sourceHandle.startsWith('array-')) {
-            const fieldIndex = parseInt(sourceHandle.replace('array-', ''));
-            const field = sourceNode.data.fields?.[fieldIndex];
-            if (!field || field.type !== 'array') {
-              console.warn('Connection rejected: Source handle does not correspond to an array field');
-              return;
-            }
-          } else {
-            console.warn('Connection rejected: Source handle is not an array field handle');
+      if (!sourceNode || !targetNode) {
+        console.warn('Connection rejected: Source or target node not found');
+        return;
+      }
+      
+      // Prevent self-connections
+      if (params.source === params.target) {
+        console.warn('Connection rejected: Cannot connect node to itself');
+        return;
+      }
+      
+      // Check if trying to connect from document array field to array node
+      if (sourceNode.type === 'document' && targetNode.type === 'array') {
+        // Check if the source handle corresponds to an array field
+        if (sourceHandle && sourceHandle.startsWith('array-')) {
+          const fieldIndex = parseInt(sourceHandle.replace('array-', ''));
+          const field = sourceNode.data.fields?.[fieldIndex];
+          if (!field || field.type !== 'array') {
+            console.warn('Connection rejected: Source handle does not correspond to an array field');
             return;
           }
-        } else if (sourceNode.type === 'document' || targetNode.type === 'array') {
-          // Reject other connections involving document nodes or array nodes
-          console.warn('Connection rejected: Invalid connection between document and array nodes');
+        } else {
+          console.warn('Connection rejected: Source handle is not an array field handle');
           return;
         }
+      } else if (sourceNode.type === 'document' || targetNode.type === 'array') {
+        // Reject other connections involving document nodes or array nodes
+        console.warn('Connection rejected: Invalid connection between document and array nodes');
+        return;
       }
 
       const newEdge = {
@@ -396,22 +534,8 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       saveStateForUndo('ADD_EDGE', newEdge);
 
       setEdges((eds) => {
-        // Check if source and target nodes exist
-        const sourceExists = nodes.some(node => node.id === params.source);
-        const targetExists = nodes.some(node => node.id === params.target);
-        
-        if (!sourceExists || !targetExists) {
-          return eds;
-        }
-
         // Handle snapping logic
-        const sourceNode = nodes.find(node => node.id === params.source);
-        const targetNode = nodes.find(node => node.id === params.target);
-        
         if (sourceNode && targetNode) {
-          const sourceHandle = params.sourceHandle;
-          const targetHandle = params.targetHandle;
-          
           // Only snap for valid directional connections (output to input)
           const isValidHorizontalConnection = sourceHandle === 'right' && targetHandle === 'left';
           const isValidVerticalConnection = sourceHandle === 'bottom' && targetHandle === 'top';
@@ -458,7 +582,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
         fields = [];
         break;
       case 'array':
-        label = 'New Array';
+        label = 'Unconnected Array';
         properties = {};
         fields = [];
         break;

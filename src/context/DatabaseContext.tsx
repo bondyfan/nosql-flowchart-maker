@@ -12,8 +12,8 @@ interface DatabaseContextType {
   dbType: DatabaseType;
   isLoading: boolean;
   isConnected: boolean;
-  setNodes: (nodes: Node<NodeData>[]) => void;
-  setEdges: (edges: Edge[]) => void;
+  setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>;
+  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   setDbType: (type: DatabaseType) => void;
   addNode: (type: string, position: { x: number, y: number }) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;

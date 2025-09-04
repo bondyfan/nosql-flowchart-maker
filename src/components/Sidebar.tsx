@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   Database, Layers, Box, Key, Circle, Hash, List, Server,
-  Search, Plus, X, Zap, Minus as SeparatorIcon, Trash2, Brackets
+  Search, Plus, X, Zap, Minus as SeparatorIcon, Trash2, Brackets,
+  FolderTree
 } from 'lucide-react';
 import { useDatabase } from '../context/DatabaseContext';
 
@@ -45,14 +46,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, selectedProcessNode, onDel
   // Determine which node types to show based on the selected database type
   const getNodeTypesForDbType = () => {
     const baseNodes = [
-      { type: 'document', icon: <Database size={18} />, label: 'Document', color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' },
+      { type: 'document', icon: <Database size={18} />, label: 'Collection', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-400 font-semibold' },
       { type: 'array', icon: <Brackets size={18} />, label: 'Array', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-200' },
+      { type: 'subcollection', icon: <FolderTree size={18} />, label: 'Subcollection', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200' },
       { type: 'process', icon: <Zap size={18} />, label: 'Process', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200' }
     ];
 
     switch (dbType) {
       case 'document':
-        return baseNodes.filter(node => ['document', 'array', 'process'].includes(node.type));
+        return baseNodes.filter(node => ['document', 'array', 'subcollection', 'process'].includes(node.type));
       case 'graph':
         return [
           { type: 'node', icon: <Circle size={18} />, label: 'Node', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' },

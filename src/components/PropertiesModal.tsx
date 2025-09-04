@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Node } from 'reactflow';
-import { Trash2, Plus, X, Database, Key, GripVertical, Brackets } from 'lucide-react';
+import { Trash2, Plus, X, Database, Key, GripVertical, Brackets, Pencil, Check } from 'lucide-react';
 import { useDatabase } from '../context/DatabaseContext';
 import { NodeData } from '../types';
 import {
@@ -27,9 +27,10 @@ interface SortableFieldItemProps {
   field: { name: string; type: string };
   index: number;
   onRemove: (index: number) => void;
+  onEdit: (index: number, field: { name: string; type: string }) => void;
 }
 
-const SortableFieldItem: React.FC<SortableFieldItemProps> = ({ field, index, onRemove }) => {
+const SortableFieldItem: React.FC<SortableFieldItemProps> = ({ field, index, onRemove, onEdit }) => {
   const {
     attributes,
     listeners,
@@ -44,6 +45,10 @@ const SortableFieldItem: React.FC<SortableFieldItemProps> = ({ field, index, onR
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(field.name);
+  const [editType, setEditType] = useState(field.type);
 
   return (
     <div
@@ -60,12 +65,38 @@ const SortableFieldItem: React.FC<SortableFieldItemProps> = ({ field, index, onR
         <GripVertical size={16} />
       </div>
       <div className="flex-1 flex items-center justify-between py-1">
-        <span className="font-medium text-gray-900 dark:text-white">
-          {field.name}
-        </span>
-        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full">
-          {field.type}
-        </span>
+        {isEditing ? (
+          <div className="flex-1 grid grid-cols-2 gap-2">
+            <input
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm px-2 py-1 text-gray-900 dark:text-white"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="Field name"
+            />
+            <select
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm px-2 py-1 text-gray-900 dark:text-white"
+              value={editType}
+              onChange={(e) => setEditType(e.target.value)}
+            >
+              <option value="string">String</option>
+              <option value="number">Number</option>
+              <option value="boolean">Boolean</option>
+              <option value="date">Date</option>
+              <option value="array">Array</option>
+              <option value="subcollection">Subcollection</option>
+              <option value="object">Object</option>
+            </select>
+          </div>
+        ) : (
+          <>
+            <span className="font-medium text-gray-900 dark:text-white">
+              {field.name}
+            </span>
+            <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full">
+              {field.type}
+            </span>
+          </>
+        )}
       </div>
       <button
         onClick={() => onRemove(index)}
@@ -74,6 +105,27 @@ const SortableFieldItem: React.FC<SortableFieldItemProps> = ({ field, index, onR
       >
         <Trash2 size={16} />
       </button>
+      {isEditing ? (
+        <button
+          onClick={() => {
+            const updated = { name: editName.trim() || field.name, type: editType };
+            onEdit(index, updated);
+            setIsEditing(false);
+          }}
+          className="opacity-100 p-2 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-green-500 ml-2"
+          title="Save changes"
+        >
+          <Check size={16} />
+        </button>
+      ) : (
+        <button
+          onClick={() => setIsEditing(true)}
+          className="opacity-0 group-hover:opacity-100 p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-900/20 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
+          title="Edit field"
+        >
+          <Pencil size={16} />
+        </button>
+      )}
     </div>
   );
 };
@@ -696,7 +748,17 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                     strategy={verticalListSortingStrategy}
                   >
                     {fields.map((field, index) => (
-                      <SortableFieldItem key={index} field={field} index={index} onRemove={handleRemoveField} />
+                      <SortableFieldItem
+                        key={index}
+                        field={field}
+                        index={index}
+                        onRemove={handleRemoveField}
+                        onEdit={(idx, updatedField) => {
+                          const newFields = fields.map((f, i) => (i === idx ? updatedField : f));
+                          setFields(newFields);
+                          updateNodeData(node!.id, { fields: newFields });
+                        }}
+                      />
                     ))}
                   </SortableContext>
                 </DndContext>
@@ -738,6 +800,7 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                     <option value="boolean">Boolean</option>
                     <option value="date">Date</option>
                     <option value="array">Array</option>
+                    <option value="subcollection">Subcollection</option>
                     <option value="object">Object</option>
                   </select>
                   

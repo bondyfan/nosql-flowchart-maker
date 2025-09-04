@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Zap, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
+import { Zap, ChevronRight, ChevronDown } from 'lucide-react';
 import { NodeData } from '../../types';
 import { useDatabase } from '../../context/DatabaseContext';
 
@@ -17,71 +17,71 @@ const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
   // Get the selected color or default to yellow
   const nodeColor = typeof data.properties?.color === 'string' ? data.properties.color : 'yellow';
   
-  // Define color classes for different color options
+  // Define color classes - all using gray for lower contrast
   const colorClasses = {
     yellow: {
       bg: 'bg-yellow-50 dark:bg-yellow-900/30',
       border: 'border-yellow-300 dark:border-yellow-600',
-      ring: 'ring-yellow-500',
+      ring: 'ring-yellow-400',
       handle: 'bg-yellow-500',
       icon: 'text-yellow-600 dark:text-yellow-400',
-      focus: 'focus:ring-yellow-500'
+      focus: 'focus:ring-yellow-400'
     },
     blue: {
-      bg: 'bg-blue-50 dark:bg-blue-900/30',
-      border: 'border-blue-300 dark:border-blue-600',
-      ring: 'ring-blue-500',
-      handle: 'bg-blue-500',
-      icon: 'text-blue-600 dark:text-blue-400',
-      focus: 'focus:ring-blue-500'
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: 'border-gray-300 dark:border-gray-600',
+      ring: 'ring-gray-400',
+      handle: 'bg-gray-500',
+      icon: 'text-gray-600 dark:text-gray-400',
+      focus: 'focus:ring-gray-400'
     },
     green: {
-      bg: 'bg-green-50 dark:bg-green-900/30',
-      border: 'border-green-300 dark:border-green-600',
-      ring: 'ring-green-500',
-      handle: 'bg-green-500',
-      icon: 'text-green-600 dark:text-green-400',
-      focus: 'focus:ring-green-500'
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: 'border-gray-300 dark:border-gray-600',
+      ring: 'ring-gray-400',
+      handle: 'bg-gray-500',
+      icon: 'text-gray-600 dark:text-gray-400',
+      focus: 'focus:ring-gray-400'
     },
     purple: {
-      bg: 'bg-purple-50 dark:bg-purple-900/30',
-      border: 'border-purple-300 dark:border-purple-600',
-      ring: 'ring-purple-500',
-      handle: 'bg-purple-500',
-      icon: 'text-purple-600 dark:text-purple-400',
-      focus: 'focus:ring-purple-500'
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: 'border-gray-300 dark:border-gray-600',
+      ring: 'ring-gray-400',
+      handle: 'bg-gray-500',
+      icon: 'text-gray-600 dark:text-gray-400',
+      focus: 'focus:ring-gray-400'
     },
     red: {
-      bg: 'bg-red-50 dark:bg-red-900/30',
-      border: 'border-red-300 dark:border-red-600',
-      ring: 'ring-red-500',
-      handle: 'bg-red-500',
-      icon: 'text-red-600 dark:text-red-400',
-      focus: 'focus:ring-red-500'
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: 'border-gray-300 dark:border-gray-600',
+      ring: 'ring-gray-400',
+      handle: 'bg-gray-500',
+      icon: 'text-gray-600 dark:text-gray-400',
+      focus: 'focus:ring-gray-400'
     },
     orange: {
-      bg: 'bg-orange-50 dark:bg-orange-900/30',
-      border: 'border-orange-300 dark:border-orange-600',
-      ring: 'ring-orange-500',
-      handle: 'bg-orange-500',
-      icon: 'text-orange-600 dark:text-orange-400',
-      focus: 'focus:ring-orange-500'
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: 'border-gray-300 dark:border-gray-600',
+      ring: 'ring-gray-400',
+      handle: 'bg-gray-500',
+      icon: 'text-gray-600 dark:text-gray-400',
+      focus: 'focus:ring-gray-400'
     },
     pink: {
-      bg: 'bg-pink-50 dark:bg-pink-900/30',
-      border: 'border-pink-300 dark:border-pink-600',
-      ring: 'ring-pink-500',
-      handle: 'bg-pink-500',
-      icon: 'text-pink-600 dark:text-pink-400',
-      focus: 'focus:ring-pink-500'
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: 'border-gray-300 dark:border-gray-600',
+      ring: 'ring-gray-400',
+      handle: 'bg-gray-500',
+      icon: 'text-gray-600 dark:text-gray-400',
+      focus: 'focus:ring-gray-400'
     },
     indigo: {
-      bg: 'bg-indigo-50 dark:bg-indigo-900/30',
-      border: 'border-indigo-300 dark:border-indigo-600',
-      ring: 'ring-indigo-500',
-      handle: 'bg-indigo-500',
-      icon: 'text-indigo-600 dark:text-indigo-400',
-      focus: 'focus:ring-indigo-500'
+      bg: 'bg-gray-50 dark:bg-gray-800',
+      border: 'border-gray-300 dark:border-gray-600',
+      ring: 'ring-gray-400',
+      handle: 'bg-gray-500',
+      icon: 'text-gray-600 dark:text-gray-400',
+      focus: 'focus:ring-gray-400'
     }
   } as const;
 
@@ -176,8 +176,8 @@ const ProcessNode: React.FC<NodeProps<NodeData>> = ({ data, id, selected }) => {
 
   return (
     <div 
-      className={`relative px-4 py-2 rounded-lg shadow-md border ${currentColors.border} ${currentColors.bg} transition-all duration-200 w-[250px] cursor-pointer ${
-        selected ? `ring-2 ${currentColors.ring} shadow-lg` : ''
+      className={`relative px-4 py-2 rounded-lg shadow-sm border ${currentColors.border} ${currentColors.bg} transition-all duration-200 w-[250px] cursor-pointer ${
+        selected ? `ring-2 ${currentColors.ring} shadow-md` : ''
       }`}
     >
       {/* Top Handle - Input */}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Database, Layers, Box, Key, Circle, Hash, List, Server,
   Search, Plus, X, Zap, Minus as SeparatorIcon, Trash2, Brackets,
-  FolderTree
+  ChevronDown, ChevronRight, FolderTree
 } from 'lucide-react';
 import { useDatabase } from '../context/DatabaseContext';
 
@@ -20,6 +20,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, selectedProcessNode, onDel
     collections, 
     addCollection, 
     removeCollection,
+    addSubcollection,
+    removeSubcollection,
     separators,
     addSeparator,
     updateSeparator
@@ -29,6 +31,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, selectedProcessNode, onDel
   const [newCollectionName, setNewCollectionName] = useState('');
   const [newSeparatorLabel, setNewSeparatorLabel] = useState('');
   const [newSeparatorColor, setNewSeparatorColor] = useState('#3b82f6');
+  const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
+  const [newSubcollectionName, setNewSubcollectionName] = useState('');
+  const [activeSubcollectionParent, setActiveSubcollectionParent] = useState<string | null>(null);
   
   // Find the selected node
   const selectedNode = nodes.find(node => node.id === selectedProcessNode);
@@ -46,15 +51,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, selectedProcessNode, onDel
   // Determine which node types to show based on the selected database type
   const getNodeTypesForDbType = () => {
     const baseNodes = [
-      { type: 'document', icon: <Database size={18} />, label: 'Collection', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-400 font-semibold' },
+      { type: 'document', icon: <Database size={18} />, label: 'Document', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-400 font-semibold' },
       { type: 'array', icon: <Brackets size={18} />, label: 'Array', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-200' },
-      { type: 'subcollection', icon: <FolderTree size={18} />, label: 'Subcollection', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200' },
       { type: 'process', icon: <Zap size={18} />, label: 'Process', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200' }
     ];
 
     switch (dbType) {
       case 'document':
-        return baseNodes.filter(node => ['document', 'array', 'subcollection', 'process'].includes(node.type));
+        return baseNodes.filter(node => ['document', 'array', 'process'].includes(node.type));
       case 'graph':
         return [
           { type: 'node', icon: <Circle size={18} />, label: 'Node', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' },
@@ -78,6 +82,25 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, selectedProcessNode, onDel
     if (newCollectionName.trim()) {
       addCollection(newCollectionName.trim());
       setNewCollectionName('');
+    }
+  };
+
+  const handleToggleCollection = (collectionId: string) => {
+    const newExpanded = new Set(expandedCollections);
+    if (newExpanded.has(collectionId)) {
+      newExpanded.delete(collectionId);
+      setActiveSubcollectionParent(null);
+    } else {
+      newExpanded.add(collectionId);
+    }
+    setExpandedCollections(newExpanded);
+  };
+
+  const handleAddSubcollection = (parentCollectionId: string) => {
+    if (newSubcollectionName.trim()) {
+      addSubcollection(parentCollectionId, newSubcollectionName.trim());
+      setNewSubcollectionName('');
+      setActiveSubcollectionParent(null);
     }
   };
 
@@ -259,24 +282,101 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, selectedProcessNode, onDel
           </h3>
           {collections.length > 0 ? (
             <div className="space-y-2">
-              {collections.map((collection) => (
-                <div
-                  key={collection.id}
-                  className="flex items-center justify-between p-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <div className="flex items-center">
-                    <Layers size={16} className="text-blue-600 dark:text-blue-400 mr-2" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{collection.name}</span>
+              {collections.filter(c => !c.parentId).sort((a, b) => a.name.localeCompare(b.name)).map((collection) => {
+                const subcollections = collections.filter(c => c.parentId === collection.id);
+                return (
+                  <div key={collection.id} className="space-y-1">
+                    {/* Main collection */}
+                    <div className="flex items-center justify-between p-3 rounded-md bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                      <div className="flex items-center flex-1">
+                        <button
+                          onClick={() => handleToggleCollection(collection.id)}
+                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded mr-1"
+                        >
+                          {expandedCollections.has(collection.id) ? (
+                            <ChevronDown size={14} className="text-gray-600 dark:text-gray-400" />
+                          ) : (
+                            <ChevronRight size={14} className="text-gray-600 dark:text-gray-400" />
+                          )}
+                        </button>
+                        <Layers size={16} className="text-blue-600 dark:text-blue-400 mr-2" />
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{collection.name}</span>
+                      </div>
+                      <button
+                        onClick={() => removeCollection(collection.id)}
+                        className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 focus:outline-none"
+                        title="Delete collection"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    {/* Expanded subcollections */}
+                    {expandedCollections.has(collection.id) && (
+                      <div className="ml-6 space-y-2">
+                        {/* Existing subcollections */}
+                        {subcollections.sort((a, b) => a.name.localeCompare(b.name)).map((subcollection) => (
+                          <div
+                            key={subcollection.id}
+                            className="flex items-center justify-between p-2 rounded-md bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+                          >
+                            <div className="flex items-center">
+                              <FolderTree size={14} className="text-orange-600 dark:text-orange-400 mr-2" />
+                              <span className="text-sm text-gray-800 dark:text-gray-200">{subcollection.name}</span>
+                            </div>
+                            <button
+                              onClick={() => removeSubcollection(collection.id, subcollection.id)}
+                              className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 focus:outline-none"
+                              title="Delete subcollection"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Add subcollection input */}
+                        {activeSubcollectionParent === collection.id ? (
+                          <div className="flex space-x-2">
+                            <input
+                              type="text"
+                              className="flex-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-orange-500 focus:ring-orange-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                              placeholder="Subcollection name"
+                              value={newSubcollectionName}
+                              onChange={(e) => setNewSubcollectionName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleAddSubcollection(collection.id);
+                                } else if (e.key === 'Escape') {
+                                  setActiveSubcollectionParent(null);
+                                  setNewSubcollectionName('');
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              className="inline-flex items-center px-2 py-1 border border-transparent shadow-sm text-xs font-medium rounded text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                              onClick={() => handleAddSubcollection(collection.id)}
+                              disabled={!newSubcollectionName.trim()}
+                            >
+                              <Plus size={12} className="mr-1" />
+                              Add
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setActiveSubcollectionParent(collection.id)}
+                            className="flex items-center p-2 rounded-md border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-orange-400 dark:hover:border-orange-500 text-gray-500 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors w-full"
+                          >
+                            <Plus size={14} className="mr-2" />
+                            <span className="text-sm">Add subcollection</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => removeCollection(collection.id)}
-                    className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 focus:outline-none"
-                    title="Delete collection"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-6">

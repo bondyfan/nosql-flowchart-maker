@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Node } from 'reactflow';
 import { Trash2, Plus, X, Database, Key, GripVertical, Brackets, Pencil, Check } from 'lucide-react';
 import { useDatabase } from '../context/DatabaseContext';
-import { NodeData } from '../types';
+import { NodeData, Collection } from '../types';
 import {
   DndContext,
   closestCenter,
@@ -81,9 +81,8 @@ const SortableFieldItem: React.FC<SortableFieldItemProps> = ({ field, index, onR
               <option value="string">String</option>
               <option value="number">Number</option>
               <option value="boolean">Boolean</option>
-              <option value="date">Date</option>
+              <option value="timestamp">Timestamp</option>
               <option value="array">Array</option>
-              <option value="subcollection">Subcollection</option>
               <option value="object">Object</option>
             </select>
           </div>
@@ -92,7 +91,21 @@ const SortableFieldItem: React.FC<SortableFieldItemProps> = ({ field, index, onR
             <span className="font-medium text-gray-900 dark:text-white">
               {field.name}
             </span>
-            <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full">
+            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+              field.type === 'array' 
+                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                : field.type === 'timestamp'
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                : field.type === 'string'
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                : field.type === 'number'
+                ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                : field.type === 'boolean'
+                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                : field.type === 'object'
+                ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-300'
+                : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+            }`}>
               {field.type}
             </span>
           </>
@@ -229,7 +242,24 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
 
   const handleCollectionChange = (collectionId: string) => {
     setSelectedCollectionId(collectionId);
-    updateNodeData(node.id, { collectionId: collectionId || undefined });
+    
+    // Auto-generate label based on collection assignment
+    let newLabel = 'Document';
+    if (collectionId) {
+      const selectedCollection = collections.find(c => c.id === collectionId);
+      if (selectedCollection) {
+        if (selectedCollection.parentId) {
+          const parent = collections.find(c => c.id === selectedCollection.parentId);
+          const displayName = parent ? `${parent.name}/${selectedCollection.name}` : selectedCollection.name;
+          newLabel = `${displayName} document`;
+        } else {
+          newLabel = `${selectedCollection.name} document`;
+        }
+      }
+    }
+    
+    setLabel(newLabel);
+    updateNodeData(node!.id, { collectionId, label: newLabel });
   };
 
   const handleAddField = () => {
@@ -242,8 +272,8 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
     }
   };
 
-  const handleRemoveField = (index: number) => {
-    const newFields = fields.filter((_, i) => i !== index);
+  const handleRemoveField = (fieldToRemove: any) => {
+    const newFields = fields.filter(field => field !== fieldToRemove);
     setFields(newFields);
     updateNodeData(node.id, { fields: newFields });
   };
@@ -382,7 +412,7 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
         <div className="flex items-center justify-between p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 border-b border-gray-200 dark:border-gray-600">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              {node.type === 'document' ? (
+              {node.type === 'document' || node.type === 'collection' ? (
                 <Database size={20} className="text-blue-600 dark:text-blue-400" />
               ) : node.type === 'process' ? (
                 <Key size={20} className="text-purple-600 dark:text-purple-400" />
@@ -392,7 +422,7 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                {node.type === 'document' ? 'Document Properties' : 
+                {node.type === 'document' || node.type === 'collection' ? 'Document Properties' : 
                  node.type === 'process' ? 'Process Properties' : 'Array Properties'}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -410,44 +440,73 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
 
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(85vh-80px)]">
-          {/* Node Label */}
-          <div className="space-y-2">
-            <label htmlFor="node-label" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Node Label
-            </label>
-            
-            {/* Show auto-naming info for array nodes */}
-            {node.type === 'array' && node.data._isAutoNamed && (
-              <div className="mb-2 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-                <p className="text-sm text-purple-800 dark:text-purple-200 flex items-center">
-                  <Brackets size={14} className="mr-2" />
-                  This array node's name is automatically set based on the connected field: <strong>{node.data._connectedFieldName}</strong>
+          {/* Auto-naming info or current title for document nodes */}
+          {(node.type === 'document' || node.type === 'collection') && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              {!selectedCollectionId ? (
+                <p className="text-sm text-blue-800 dark:text-blue-200 flex items-center">
+                  <Database size={14} className="mr-2" />
+                  Document node names are automatically generated based on collection assignment
                 </p>
-              </div>
-            )}
-            
-            <input
-              type="text"
-              id="node-label"
-              className={`block w-full rounded-xl border shadow-sm px-4 py-3 text-sm transition-all ${
-                node.type === 'array' && node.data._isAutoNamed
-                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-blue-500 focus:ring-2 focus:ring-opacity-20'
-              } placeholder-gray-500 dark:placeholder-gray-400`}
-              value={label}
-              onChange={(e) => handleLabelChange(e.target.value)}
-              placeholder="Enter a descriptive label"
-              readOnly={node.type === 'array' && node.data._isAutoNamed}
-              title={node.type === 'array' && node.data._isAutoNamed ? 'Array node names are automatically assigned based on connected fields' : undefined}
-            />
-          </div>
+              ) : (
+                <p className="text-sm text-blue-800 dark:text-blue-200 flex items-center">
+                  <Database size={14} className="mr-2" />
+                  Current node name: <strong className="ml-1">{label}</strong>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Node Label for non-document nodes */}
+          {node.type !== 'document' && node.type !== 'collection' && (
+            <div className="space-y-2">
+              <label htmlFor="node-label" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Node Label
+              </label>
+              
+              {/* Show auto-naming info for array nodes */}
+              {node.type === 'array' && node.data._isAutoNamed && (
+                <div className="mb-2 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                  <p className="text-sm text-purple-800 dark:text-purple-200 flex items-center">
+                    <Brackets size={14} className="mr-2" />
+                    This array node's name is automatically set based on the connected field: <strong>{node.data._connectedFieldName}</strong>
+                  </p>
+                </div>
+              )}
+              
+              <input
+                type="text"
+                id="node-label"
+                className={`block w-full rounded-xl border shadow-sm px-4 py-3 text-sm transition-all ${
+                  node.type === 'array' && node.data._isAutoNamed
+                    ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-blue-500 focus:ring-2 focus:ring-opacity-20'
+                } placeholder-gray-500 dark:placeholder-gray-400`}
+                value={label}
+                onChange={(e) => handleLabelChange(e.target.value)}
+                placeholder="Enter a descriptive label"
+                readOnly={node.type === 'array' && node.data._isAutoNamed}
+                title={node.type === 'array' && node.data._isAutoNamed ? 'Array node names are automatically assigned based on connected fields' : undefined}
+              />
+            </div>
+          )}
 
           {/* Collection selection for document nodes */}
-          {node.type === 'document' && (
+          {(node.type === 'document' || node.type === 'collection') && (
             <div className="space-y-2">
               <label htmlFor="collection-select" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                 Collection Assignment
               </label>
+              
+              {/* Show auto-naming info for document nodes */}
+              {node.data._isAutoNamed && selectedCollectionId && (
+                <div className="mb-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                  <p className="text-sm text-emerald-800 dark:text-emerald-200 flex items-center">
+                    <Database size={14} className="mr-2" />
+                    This document's name is automatically set based on the selected collection: <strong>{collections.find(c => c.id === selectedCollectionId)?.name}</strong>
+                  </p>
+                </div>
+              )}
               <select
                 id="collection-select"
                 value={selectedCollectionId}
@@ -455,11 +514,30 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                 className="block w-full rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:ring-2 focus:ring-opacity-20 px-4 py-3 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-all"
               >
                 <option value="">Choose a collection...</option>
-                {collections.map((collection) => (
-                  <option key={collection.id} value={collection.id}>
-                    {collection.name}
-                  </option>
-                ))}
+                {collections.sort((a, b) => {
+                  const getDisplayName = (coll: Collection) => {
+                    if (coll.parentId) {
+                      const parent = collections.find(c => c.id === coll.parentId);
+                      return parent ? `${parent.name}/${coll.name}` : coll.name;
+                    }
+                    return coll.name;
+                  };
+                  return getDisplayName(a).localeCompare(getDisplayName(b));
+                }).map((collection) => {
+                  const getCollectionDisplayName = (coll: Collection) => {
+                    if (coll.parentId) {
+                      const parent = collections.find(c => c.id === coll.parentId);
+                      return parent ? `${parent.name}/${coll.name}` : coll.name;
+                    }
+                    return coll.name;
+                  };
+                  
+                  return (
+                    <option key={collection.id} value={collection.id}>
+                      {getCollectionDisplayName(collection)}
+                    </option>
+                  );
+                })}
               </select>
               {collections.length === 0 && (
                 <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
@@ -747,14 +825,15 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                     items={fields.map((_, index) => `field-${index}`)}
                     strategy={verticalListSortingStrategy}
                   >
-                    {fields.map((field, index) => (
+                    {[...fields].sort((a, b) => a.name.localeCompare(b.name)).map((field, index) => (
                       <SortableFieldItem
-                        key={index}
+                        key={`${field.name}-${field.type}-${index}`}
                         field={field}
                         index={index}
-                        onRemove={handleRemoveField}
-                        onEdit={(idx, updatedField) => {
-                          const newFields = fields.map((f, i) => (i === idx ? updatedField : f));
+                        onRemove={() => handleRemoveField(field)}
+                        onEdit={(_, updatedField) => {
+                          const originalIndex = fields.findIndex(f => f === field);
+                          const newFields = fields.map((f, i) => (i === originalIndex ? updatedField : f));
                           setFields(newFields);
                           updateNodeData(node!.id, { fields: newFields });
                         }}
@@ -798,9 +877,8 @@ const PropertiesModal: React.FC<PropertiesModalProps> = ({ node, isOpen, onClose
                     <option value="string">String</option>
                     <option value="number">Number</option>
                     <option value="boolean">Boolean</option>
-                    <option value="date">Date</option>
+                    <option value="timestamp">Timestamp</option>
                     <option value="array">Array</option>
-                    <option value="subcollection">Subcollection</option>
                     <option value="object">Object</option>
                   </select>
                   

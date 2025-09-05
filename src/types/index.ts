@@ -9,6 +9,7 @@ export interface Collection {
   id: string;
   name: string;
   description?: string;
+  parentId?: string; // For subcollections - references parent collection ID
 }
 
 export interface Separator {

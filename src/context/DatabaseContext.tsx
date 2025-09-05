@@ -21,6 +21,8 @@ interface DatabaseContextType {
   addCollection: (name: string, description?: string) => string;
   updateCollection: (id: string, data: Partial<Omit<Collection, 'id'>>) => void;
   removeCollection: (id: string) => void;
+  addSubcollection: (parentCollectionId: string, name: string) => string;
+  removeSubcollection: (collectionId: string, subcollectionId: string) => void;
   addSeparator: (x: number, label?: string, color?: string) => string;
   updateSeparator: (id: string, data: Partial<Omit<Separator, 'id'>>) => void;
   removeSeparator: (id: string) => void;
@@ -661,6 +663,23 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
     setSeparators((separators) => separators.filter((separator) => separator.id !== id));
   };
 
+  const addSubcollection = (parentCollectionId: string, name: string) => {
+    const newSubcollection: Collection = {
+      id: generateUniqueId(),
+      name,
+      parentId: parentCollectionId,
+    };
+    
+    setCollections((collections) => [...collections, newSubcollection]);
+    
+    console.log('🆕 Adding new subcollection:', newSubcollection);
+    return newSubcollection.id;
+  };
+
+  const removeSubcollection = (_collectionId: string, subcollectionId: string) => {
+    setCollections((collections) => collections.filter(c => c.id !== subcollectionId));
+  };
+
   return (
     <DatabaseContext.Provider 
       value={{ 
@@ -687,6 +706,8 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
         addCollection,
         updateCollection,
         removeCollection,
+        addSubcollection,
+        removeSubcollection,
         addSeparator,
         updateSeparator,
         removeSeparator

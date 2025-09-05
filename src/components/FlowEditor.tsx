@@ -21,7 +21,6 @@ import Sidebar from './Sidebar';
 import CollectionNode from './nodes/CollectionNode';
 import ArrayNode from './nodes/ArrayNode';
 import ProcessNode from './nodes/ProcessNode';
-import SubcollectionNode from './nodes/SubcollectionNode';
 import CustomEdge from './edges/CustomEdge';
 import PropertiesModal from './PropertiesModal';
 import Separator from './Separator';
@@ -32,7 +31,6 @@ const nodeTypes = {
   collection: CollectionNode,
   array: ArrayNode,
   process: ProcessNode,
-  subcollection: SubcollectionNode,
 };
 
 const edgeTypes = {
@@ -395,7 +393,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
             
             console.log(`📄 Document connection: field index ${fieldIndex}, field:`, field);
             
-            if (field && (field.type === 'array' || field.type === 'subcollection')) {
+            if (field && field.type === 'array') {
               // Update array node name to match the field name
               const newLabel = field.name;
               
@@ -421,7 +419,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
             
             console.log(`🔗 Array field connection: field index ${fieldIndex}, field:`, field);
             
-            if (field && (field.type === 'array' || field.type === 'subcollection')) {
+            if (field && field.type === 'array') {
               // Update array node name to match the field name from the source array
               const newLabel = field.name;
               
@@ -463,68 +461,11 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
     });
   }, [edges]);
 
-  // Function to update subcollection node names based on connected subcollection fields
-  const updateSubcollectionNodeNames = useCallback(() => {
-    setNodes(currentNodes => {
-      return currentNodes.map(node => {
-        if (node.type !== 'subcollection') return node;
-
-        // Find edges connecting TO this subcollection node (incoming connections)
-        // Both 'left' and 'top' are valid input handles
-        const connectingEdge = edges.find(edge =>
-          edge.target === node.id && (edge.targetHandle === 'left' || edge.targetHandle === 'top')
-        );
-
-        if (connectingEdge) {
-          const sourceNode = currentNodes.find(n => n.id === connectingEdge.source);
-          if (sourceNode && (sourceNode.type === 'document' || sourceNode.type === 'collection') && connectingEdge.sourceHandle?.startsWith('array-')) {
-            const handleParts = connectingEdge.sourceHandle.split('-');
-            const fieldIndex = parseInt(handleParts[1]);
-            const field = sourceNode.data.fields?.[fieldIndex];
-
-            if (field && field.type === 'subcollection') {
-              const newLabel = field.name;
-              if (node.data.label !== newLabel) {
-                return {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    label: newLabel,
-                    _connectedFieldName: field.name,
-                    _sourceDocumentLabel: sourceNode.data.label,
-                    _isAutoNamed: true
-                  }
-                };
-              }
-            }
-          }
-        } else {
-          // No connection - reset auto-named subcollections
-          if (node.data._isAutoNamed) {
-            const defaultLabel = 'Subcollection';
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                label: defaultLabel,
-                _connectedFieldName: undefined,
-                _sourceDocumentLabel: undefined,
-                _isAutoNamed: false
-              }
-            };
-          }
-        }
-
-        return node;
-      });
-    });
-  }, [edges]);
 
   // Update array node names when edges change
   useEffect(() => {
     updateArrayNodeNames();
-    updateSubcollectionNodeNames();
-  }, [edges, updateArrayNodeNames, updateSubcollectionNodeNames]);
+  }, [edges, updateArrayNodeNames]);
 
   // Save current state for undo
   const saveStateForUndo = (actionType: string, data: any) => {
@@ -702,26 +643,6 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
           console.warn('Connection rejected: Source handle must be an array field handle');
           return;
         }
-      } else if ((sourceNode.type === 'document' || sourceNode.type === 'collection') && targetNode.type === 'subcollection') {
-        // Only allow connections from document subcollection fields to subcollection nodes
-        if (sourceHandle && sourceHandle.startsWith('array-')) {
-          const handleParts = sourceHandle.split('-');
-          const fieldIndex = parseInt(handleParts[1]);
-          const field = sourceNode.data.fields?.[fieldIndex];
-          if (!field || field.type !== 'subcollection') {
-            console.warn('Connection rejected: Source handle must be a subcollection field');
-            return;
-          }
-          // Allow both 'left' and 'top' as valid target handles for input
-          if (targetHandle !== 'left' && targetHandle !== 'top') {
-            console.warn('Connection rejected: Target handle must be left or top (input) for subcollection nodes');
-            return;
-          }
-          console.log('✅ Collection to Subcollection connection allowed');
-        } else {
-          console.warn('Connection rejected: Source handle must be an array/subcollection field handle');
-          return;
-        }
       } else if (sourceNode.type === 'array' && targetNode.type === 'array') {
         // Allow connections between array nodes via internal array fields
         if (sourceHandle === 'right' || sourceHandle === 'left') {
@@ -745,9 +666,6 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
         // BLOCK connections TO document array fields - they are outputs, not inputs
         console.warn('Connection rejected: Cannot connect to document array fields - they are outputs, not inputs');
         return;
-      } else if (sourceNode.type === 'subcollection' && (targetNode.type === 'collection' || targetNode.type === 'document')) {
-        // Allow subcollection nodes to connect to collection nodes
-        console.log('✅ Subcollection to collection connection allowed');
       } else if (sourceNode.type === 'process' || targetNode.type === 'process') {
         // Allow process nodes to connect to any other node type with valid handles
         // Process nodes have top, left, right, bottom handles which are already validated above
@@ -820,11 +738,6 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
         break;
       case 'array':
         label = 'Unconnected Array';
-        properties = {};
-        fields = [];
-        break;
-      case 'subcollection':
-        label = 'Subcollection';
         properties = {};
         fields = [];
         break;
@@ -1210,18 +1123,13 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
         validHandles.add(`${node.id}:left`);
         validHandles.add(`${node.id}:right`);
         validHandles.add(`${node.id}:bottom`);
-      } else if (node.type === 'subcollection') {
-        validHandles.add(`${node.id}:top`);
-        validHandles.add(`${node.id}:left`);
-        validHandles.add(`${node.id}:right`);
-        validHandles.add(`${node.id}:bottom`);
       } else if (node.type === 'array') {
         validHandles.add(`${node.id}:left`);
         validHandles.add(`${node.id}:right`);
         // Array node field handles (both left and right - all outputs)
         if (node.data.fields) {
           node.data.fields.forEach((field, index) => {
-            if (field.type === 'array' || field.type === 'subcollection') {
+            if (field.type === 'array') {
               validHandles.add(`${node.id}:array-field-${index}-left`);
               validHandles.add(`${node.id}:array-field-${index}-right`);
             }
@@ -1231,7 +1139,7 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
         // Document/Collection node array field handles (outputs only)
         if (node.data.fields) {
           node.data.fields.forEach((field, index) => {
-            if (field.type === 'array' || field.type === 'subcollection') {
+            if (field.type === 'array') {
               validHandles.add(`${node.id}:array-${index}-left`);
               validHandles.add(`${node.id}:array-${index}-right`);
             }

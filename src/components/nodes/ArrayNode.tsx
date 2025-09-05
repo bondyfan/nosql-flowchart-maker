@@ -29,11 +29,11 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => {
     <div 
       className={`px-4 py-2 rounded-lg shadow-sm border transition-all duration-200 w-[280px] ${
         isDocumentAction 
-          ? 'border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-800' 
+          ? 'border-purple-400 dark:border-purple-500 bg-purple-50 dark:bg-purple-900/20' 
           : isAutoNamed 
-            ? 'border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-800' 
-            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
-      } ${selected ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
+            ? 'border-purple-400 dark:border-purple-500 bg-purple-50 dark:bg-purple-900/20' 
+            : 'border-purple-300 dark:border-purple-600 bg-purple-50 dark:bg-purple-900/10'
+      } ${selected ? 'ring-2 ring-purple-500 shadow-md' : ''}`}
     >
       {/* Dual handles for array node - both are INPUTS positioned at header level */}
       {!isHandleConnected('right') && (
@@ -67,10 +67,10 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => {
       <div className="flex items-center">
         <Brackets size={18} className={`mr-2 ${
           isDocumentAction 
-            ? 'text-gray-600 dark:text-gray-400' 
+            ? 'text-purple-600 dark:text-purple-400' 
             : isAutoNamed 
-              ? 'text-gray-600 dark:text-gray-400' 
-              : 'text-gray-600 dark:text-gray-400'
+              ? 'text-purple-600 dark:text-purple-400' 
+              : 'text-purple-600 dark:text-purple-400'
         }`} />
         <div className={`font-medium truncate max-w-[200px] ${
           isDocumentAction 
@@ -131,7 +131,7 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => {
           {data.fields.map((field, index) => {
             const isReferencedField = referencedFields.has(field.name);
             const fieldValue = fieldValues.get(field.name);
-            const isArrayField = field.type === 'array' || field.type === 'subcollection';
+            const isArrayField = field.type === 'array';
             return (
               <div key={index} className="text-xs flex justify-between items-center py-1 relative">
                 <div className="flex items-center space-x-1 flex-1">
@@ -162,15 +162,21 @@ const ArrayNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) => {
                 </div>
                 
                 <div className="flex items-center space-x-2">
-                  <span className={`font-medium ${
-                    isReferencedField 
-                      ? 'text-gray-600 dark:text-gray-400 font-semibold' 
-                      : isDocumentAction 
-                        ? 'text-gray-600 dark:text-gray-400' 
-                        : isAutoNamed 
-                          ? 'text-gray-500 dark:text-gray-400' 
-                          : 'text-gray-500 dark:text-gray-400'
-                  }`}>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    field.type === 'array' 
+                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                      : field.type === 'timestamp'
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                      : field.type === 'string'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : field.type === 'number'
+                      ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                      : field.type === 'boolean'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                      : field.type === 'object'
+                      ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-300'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  } ${isReferencedField ? 'font-bold ring-2 ring-purple-300' : ''}`}>
                     {field.type}
                   </span>
                   

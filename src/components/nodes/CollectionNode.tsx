@@ -70,7 +70,7 @@ const CollectionNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) =
           {data.fields.map((field, index) => {
             const isReferencedField = referencedFields.has(field.name);
             const fieldValue = fieldValues.get(field.name);
-            const isArrayField = field.type === 'array' || field.type === 'subcollection';
+            const isArrayField = field.type === 'array';
             return (
               <div key={index} className="text-sm flex justify-between items-center relative py-1.5 px-2 rounded hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30">
                 <div className="flex items-center space-x-1 flex-1">
@@ -97,11 +97,21 @@ const CollectionNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) =
                 </div>
                 
                 <div className="flex items-center space-x-2">
-                  <span className={`${
-                    isReferencedField 
-                      ? 'text-orange-600 dark:text-orange-400 font-bold' 
-                      : 'text-blue-600 dark:text-blue-400'
-                  }`}>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    field.type === 'array' 
+                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                      : field.type === 'timestamp'
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                      : field.type === 'string'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : field.type === 'number'
+                      ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                      : field.type === 'boolean'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                      : field.type === 'object'
+                      ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-300'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  } ${isReferencedField ? 'font-bold ring-2 ring-orange-300' : ''}`}>
                     {field.type}
                   </span>
                   
@@ -112,7 +122,7 @@ const CollectionNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) =
                         <Handle
                           type="source"
                           position={Position.Left}
-                          className={`w-3 h-3 ${field.type === 'subcollection' ? 'bg-orange-500' : 'bg-emerald-500'}`}
+                          className="w-3 h-3 bg-purple-500"
                           id={`array-${index}-left`}
                           style={{
                             left: -30,
@@ -126,7 +136,7 @@ const CollectionNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) =
                         <Handle
                           type="source"
                           position={Position.Right}
-                          className={`w-3 h-3 ${field.type === 'subcollection' ? 'bg-orange-500' : 'bg-emerald-500'}`}
+                          className="w-3 h-3 bg-purple-500"
                           id={`array-${index}-right`}
                           style={{
                             right: -16,

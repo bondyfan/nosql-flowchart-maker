@@ -67,7 +67,7 @@ const CollectionNode: React.FC<NodeProps<NodeData>> = ({ data, selected, id }) =
       
         {data.fields && data.fields.length > 0 && (
           <div className="mt-2 pt-2 border-t border-emerald-200 dark:border-emerald-800">
-          {data.fields.map((field, index) => {
+          {data.fields.sort((a, b) => a.name.localeCompare(b.name)).map((field, index) => {
             const isReferencedField = referencedFields.has(field.name);
             const fieldValue = fieldValues.get(field.name);
             const isArrayField = field.type === 'array';

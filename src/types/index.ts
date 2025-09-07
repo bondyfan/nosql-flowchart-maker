@@ -23,7 +23,7 @@ export interface NodeData {
   label: string;
   type: 'document' | 'array' | 'process' | string;
   fields: Field[];
-  properties: Record<string, string | number | boolean>;
+  properties: Record<string, any>;
   collectionId?: string;
   _isDocumentAction?: boolean;
   _referencedFields?: Set<string>;

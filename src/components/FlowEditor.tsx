@@ -44,6 +44,10 @@ interface FlowEditorProps {
 
 const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }) => {
   const { 
+    updateNodeData, 
+    removeNode, 
+    collections, 
+    addNode, 
     nodes, 
     edges, 
     separators,
@@ -236,60 +240,95 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
       const processNode = nodes.find(n => n.id === processId);
       const processActions = processNode?.data.properties?.processActions || [];
       
-      console.log(`🔄 Processing ${processActions.length} actions from process "${processNode?.data.label}" (${processId})`);
+      // Check for inherited documents (without explicit actions)
+      const inheritedDocs = processNode?.data.properties?._inheritedDocuments || [];
+      const inheritedFieldsMap = processNode?.data.properties?._inheritedFieldsMap || {};
+      const inheritedFieldValues = processNode?.data.properties?._inheritedFieldValues || {};
       
-      // Sort actions within this process by their creation timestamp to ensure proper order
-      const sortedActions = [...processActions].sort((a, b) => {
-        const timeA = new Date(a.savedAt || 0).getTime();
-        const timeB = new Date(b.savedAt || 0).getTime();
-        return timeA - timeB; // Earlier actions first
-      });
+      console.log(`🔄 Processing ${processActions.length} actions + ${inheritedDocs.length} inherited docs from process "${processNode?.data.label}" (${processId})`);
       
-      console.log(`🔄 Processing actions for process "${processNode?.data.label}" (${processId}):`, 
-        sortedActions.map(a => ({
-          type: a.type,
-          nodeId: a.nodeId,
-          fieldName: a.fieldName || 'N/A',
-          valueType: a.valueType || 'N/A',
-          fixedValue: a.fixedValue || 'N/A',
-          savedAt: a.savedAt,
-          documentLabel: a.documentLabel || 'N/A'
-        }))
-      );
-      
-      sortedActions.forEach(action => {
-        if (action.type === 'document') {
-          referencedDocuments.add(action.nodeId);
-          documentsWithDocumentActions.add(action.nodeId); // Track document-level actions separately
-          console.log(`  📄 Added document action for ${action.nodeId} - ${action.documentLabel}`);
-        } else if (action.type === 'field') {
-          referencedDocuments.add(action.nodeId); // Add the document
-          
-          // Track which fields are referenced for this document
-          if (!documentFieldsMap.has(action.nodeId)) {
-            documentFieldsMap.set(action.nodeId, new Set());
+      // Add inherited documents (these are visible but don't count as actions)
+      inheritedDocs.forEach((docId: string) => {
+        referencedDocuments.add(docId);
+        // Don't add to documentsWithDocumentActions - these are inherited, not actions
+        
+        // Add inherited fields
+        const inheritedFields = inheritedFieldsMap[docId] || [];
+        if (inheritedFields.length > 0) {
+          if (!documentFieldsMap.has(docId)) {
+            documentFieldsMap.set(docId, new Set());
           }
-          documentFieldsMap.get(action.nodeId).add(action.fieldName);
-
-          // Track cumulative field values - later values override earlier ones (flow order)
-          if (action.valueType) {
-            if (!cumulativeFieldValues.has(action.nodeId)) {
-              cumulativeFieldValues.set(action.nodeId, new Map());
-            }
-            const prevValue = cumulativeFieldValues.get(action.nodeId).get(action.fieldName);
-            cumulativeFieldValues.get(action.nodeId).set(action.fieldName, {
-              valueType: action.valueType,
-              fixedValue: action.fixedValue
-            });
-            
-            console.log(`  📝 Field "${action.fieldName}" value updated:`, 
-              prevValue ? `${prevValue.valueType}${prevValue.fixedValue ? `:"${prevValue.fixedValue}"` : ''}` : 'none',
-              '→',
-              `${action.valueType}${action.fixedValue ? `:"${action.fixedValue}"` : ''}`
-            );
+          inheritedFields.forEach((fieldName: string) => {
+            documentFieldsMap.get(docId)!.add(fieldName);
+          });
+        }
+        
+        // Add inherited field values
+        const docFieldValues = inheritedFieldValues[docId] || {};
+        if (Object.keys(docFieldValues).length > 0) {
+          if (!cumulativeFieldValues.has(docId)) {
+            cumulativeFieldValues.set(docId, new Map());
           }
+          Object.entries(docFieldValues).forEach(([fieldName, values]: [string, any]) => {
+            cumulativeFieldValues.get(docId)!.set(fieldName, values);
+          });
         }
       });
+      
+      // Process explicit actions (these show as actual process actions)
+      if (Array.isArray(processActions)) {
+        const sortedActions = [...processActions].sort((a, b) => {
+          const timeA = new Date(a.savedAt || 0).getTime();
+          const timeB = new Date(b.savedAt || 0).getTime();
+          return timeA - timeB; // Earlier actions first
+        });
+        
+        console.log(`🔄 Processing explicit actions for process "${processNode?.data.label}" (${processId}):`, 
+          sortedActions.map(a => ({
+            type: a.type,
+            nodeId: a.nodeId,
+            fieldName: a.fieldName || 'N/A',
+            valueType: a.valueType || 'N/A',
+            fixedValue: a.fixedValue || 'N/A',
+            savedAt: a.savedAt,
+            documentLabel: a.documentLabel || 'N/A'
+          }))
+        );
+        
+        sortedActions.forEach(action => {
+          if (action.type === 'document') {
+            referencedDocuments.add(action.nodeId);
+            documentsWithDocumentActions.add(action.nodeId); // Track document-level actions separately
+            console.log(`  📄 Added document action for ${action.nodeId} - ${action.documentLabel}`);
+          } else if (action.type === 'field') {
+            referencedDocuments.add(action.nodeId); // Add the document
+            
+            // Track which fields are referenced for this document
+            if (!documentFieldsMap.has(action.nodeId)) {
+              documentFieldsMap.set(action.nodeId, new Set());
+            }
+            documentFieldsMap.get(action.nodeId)!.add(action.fieldName);
+
+            // Track cumulative field values - later values override earlier ones (flow order)
+            if (action.valueType) {
+              if (!cumulativeFieldValues.has(action.nodeId)) {
+                cumulativeFieldValues.set(action.nodeId, new Map());
+              }
+              const prevValue = cumulativeFieldValues.get(action.nodeId)!.get(action.fieldName);
+              cumulativeFieldValues.get(action.nodeId)!.set(action.fieldName, {
+                valueType: action.valueType,
+                fixedValue: action.fixedValue
+              });
+              
+              console.log(`  📝 Field "${action.fieldName}" value updated:`, 
+                prevValue ? `${prevValue.valueType}${prevValue.fixedValue ? `:"${prevValue.fixedValue}"` : ''}` : 'none',
+                '→',
+                `${action.valueType}${action.fixedValue ? `:"${action.fixedValue}"` : ''}`
+              );
+            }
+          }
+        });
+      }
     });
     
     console.log('🎯 Final cumulative document actions:', Array.from(documentsWithDocumentActions));
@@ -466,6 +505,159 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
   useEffect(() => {
     updateArrayNodeNames();
   }, [edges, updateArrayNodeNames]);
+
+  // Helper function to automatically inherit actions from upstream processes
+  const inheritUpstreamActions = useCallback((targetProcessId: string) => {
+    const targetNode = nodes.find(n => n.id === targetProcessId);
+    if (!targetNode || targetNode.type !== 'process') return;
+
+    // Find the most immediate upstream process connected to this target process
+    let immediateUpstreamId: string | null = null;
+    
+    edges.forEach(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      const targetNodeEdge = nodes.find(n => n.id === edge.target);
+      
+      if (sourceNode?.type === 'process' && targetNodeEdge?.type === 'process' && edge.target === targetProcessId) {
+        // Only count connections from output ports (right/bottom) to input ports (left/top)
+        const isValidConnection = 
+          (edge.sourceHandle === 'right' || edge.sourceHandle === 'bottom') &&
+          (edge.targetHandle === 'left' || edge.targetHandle === 'top');
+          
+        if (isValidConnection) {
+          immediateUpstreamId = edge.source;
+        }
+      }
+    });
+
+    if (!immediateUpstreamId) return;
+
+    // Use the same logic as getVisibleNodesWithFilteredFields to determine what should be inherited
+    // Build process connections and flow chain up to the upstream process
+    const processNodes = nodes.filter(n => n.type === 'process');
+    const processConnections = new Map();
+    const incomingConnections = new Map();
+    
+    edges.forEach(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      const targetNodeEdge = nodes.find(n => n.id === edge.target);
+      
+      if (sourceNode?.type === 'process' && targetNodeEdge?.type === 'process') {
+        const isValidConnection = 
+          (edge.sourceHandle === 'right' || edge.sourceHandle === 'bottom') &&
+          (edge.targetHandle === 'left' || edge.targetHandle === 'top');
+          
+        if (isValidConnection) {
+          if (!processConnections.has(edge.source)) {
+            processConnections.set(edge.source, []);
+          }
+          processConnections.get(edge.source).push(edge.target);
+          
+          if (!incomingConnections.has(edge.target)) {
+            incomingConnections.set(edge.target, []);
+          }
+          incomingConnections.get(edge.target).push(edge.source);
+        }
+      }
+    });
+
+    // Build flow chain up to the upstream process
+    const buildBackwardsChain = (processId: string, visited = new Set()): string[] => {
+      if (visited.has(processId)) return [];
+      visited.add(processId);
+      
+      const predecessors = incomingConnections.get(processId) || [];
+      let chain: string[] = [];
+      
+      for (const pred of predecessors) {
+        chain.push(...buildBackwardsChain(pred, visited));
+      }
+      
+      chain.push(processId);
+      return chain;
+    };
+    
+    const relevantProcessIds = buildBackwardsChain(immediateUpstreamId);
+    
+    // Collect all actions from the flow chain up to the upstream process
+    const referencedDocuments = new Set<string>();
+    const documentFieldsMap = new Map<string, Set<string>>();
+    const cumulativeFieldValues = new Map<string, Map<string, { valueType: string; fixedValue?: string }>>();
+
+    relevantProcessIds.forEach(processId => {
+      const processNode = nodes.find(n => n.id === processId);
+      const processActions = processNode?.data.properties?.processActions || [];
+      
+      if (Array.isArray(processActions)) {
+        const sortedActions = [...processActions].sort((a, b) => {
+          const timeA = new Date(a.savedAt || 0).getTime();
+          const timeB = new Date(b.savedAt || 0).getTime();
+          return timeA - timeB;
+        });
+        
+        sortedActions.forEach((action: any) => {
+          if (action.type === 'document') {
+            referencedDocuments.add(action.nodeId);
+          } else if (action.type === 'field') {
+            referencedDocuments.add(action.nodeId);
+            
+            if (!documentFieldsMap.has(action.nodeId)) {
+              documentFieldsMap.set(action.nodeId, new Set());
+            }
+            documentFieldsMap.get(action.nodeId)!.add(action.fieldName);
+
+            if (action.valueType) {
+              if (!cumulativeFieldValues.has(action.nodeId)) {
+                cumulativeFieldValues.set(action.nodeId, new Map());
+              }
+              cumulativeFieldValues.get(action.nodeId)!.set(action.fieldName, {
+                valueType: action.valueType,
+                fixedValue: action.fixedValue
+              });
+            }
+          }
+        });
+      }
+    });
+
+    // Store inherited state without creating explicit actions
+    // This makes documents visible but doesn't show them as actions the process has performed
+    if (referencedDocuments.size > 0) {
+      setNodes(currentNodes => 
+        currentNodes.map(node => 
+          node.id === targetProcessId 
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  properties: {
+                    ...node.data.properties,
+                    // Store inherited state for visibility logic
+                    _inheritedDocuments: Array.from(referencedDocuments),
+                    _inheritedFieldsMap: Object.fromEntries(
+                      Array.from(documentFieldsMap.entries()).map(([docId, fields]) => [
+                        docId, Array.from(fields)
+                      ])
+                    ),
+                    _inheritedFieldValues: Object.fromEntries(
+                      Array.from(cumulativeFieldValues.entries()).map(([docId, fieldMap]) => [
+                        docId, Object.fromEntries(fieldMap.entries())
+                      ])
+                    )
+                  }
+                }
+              }
+            : node
+        )
+      );
+
+      console.log(`✅ Inherited visibility for ${referencedDocuments.size} documents to "${targetNode.data.label}" (without creating actions)`);
+      console.log('Inherited documents:', Array.from(referencedDocuments).map(id => {
+        const doc = nodes.find(n => n.id === id);
+        return doc?.data.label;
+      }));
+    }
+  }, [nodes, edges, setNodes]);
 
   // Save current state for undo
   const saveStateForUndo = (actionType: string, data: any) => {
@@ -719,8 +911,16 @@ const FlowEditor: React.FC<FlowEditorProps> = ({ sidebarOpen, onUndoRedoChange }
 
         return addEdge(newEdge, eds);
       });
+
+      // If this is a process-to-process connection, automatically inherit upstream actions
+      if (sourceNode?.type === 'process' && targetNode?.type === 'process') {
+        // Use setTimeout to ensure the edge is added before inheritance
+        setTimeout(() => {
+          inheritUpstreamActions(params.target!);
+        }, 100);
+      }
     },
-    [nodes, setEdges]
+    [nodes, setEdges, inheritUpstreamActions]
   );
 
   const createNode = (type: string, position?: { x: number; y: number }) => {
